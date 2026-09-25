@@ -77,28 +77,28 @@ export default function Footer() {
 
           {/* Brand column */}
           <div className="lg:col-span-2">
-            <Link to="/" className="flex items-center gap-2 mb-5 w-fit group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-green-600
-                              flex items-center justify-center shadow-lg">
-                <Sprout className="w-6 h-6 text-white" />
+            <Link to="/" className="flex items-center gap-2.5 mb-5 w-fit group">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-emerald-600
+                              flex items-center justify-center shadow-lg text-white font-bold text-xl">
+                🌱
               </div>
               <div>
-                <span className="font-display font-bold text-2xl text-green-300">AgriBridge</span>
-                <p className="text-green-600 text-xs">Farm · Market · Connect</p>
+                <span className="font-display font-black text-2xl text-green-300">Fasal<span className="text-lime-400">Sethu</span></span>
+                <p className="text-green-500 text-xs font-semibold">Direct Farm-to-Buyer Marketplace</p>
               </div>
             </Link>
 
             <p className="text-green-400/80 text-sm leading-relaxed max-w-sm mb-6">
-              Empowering India's 140 million farming families with direct market access,
-              real-time price intelligence, and verified buyer connections — eliminating
-              the middleman and maximising farmer profits.
+              Empowering India's farmers and agricultural buyers with direct market linkage,
+              hyperlocal buyer matching, transparent mandi price benchmarks, and secure
+              digital transactions without intermediaries.
             </p>
 
             <div className="space-y-2 mb-6">
               {[
-                { Icon: Mail,  text: 'support@agribridge.in' },
-                { Icon: Phone, text: '+91 1800 XXX XXXX (Toll Free)' },
-                { Icon: MapPin,text: 'New Delhi, India 110001' },
+                { Icon: Mail,  text: 'support@fasalsethu.in' },
+                { Icon: Phone, text: '+91 1800 200 4567 (Kisan Helpline)' },
+                { Icon: MapPin,text: 'Agricultural Exchange Center, New Delhi, India' },
               ].map(({ Icon, text }) => (
                 <div key={text} className="flex items-center gap-3 text-sm text-green-500">
                   <Icon className="w-4 h-4 shrink-0" />
@@ -151,16 +151,16 @@ export default function Footer() {
                         flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-green-600">
             <Leaf className="w-4 h-4 text-green-500" />
-            <span>© 2026 AgriBridge. Made with 💚 for India's Farmers.</span>
+            <span>© 2026 FasalSethu. Dedicated to India's Farming Community.</span>
           </div>
           <div className="flex items-center gap-4 text-xs text-green-700">
-            <span>SIH26132 — Smart India Hackathon</span>
+            <span>FasalSethu M5 Architecture</span>
             <span>·</span>
             <span>All rights reserved</span>
             <span>·</span>
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              Platform Live
+              Platform Active
             </span>
           </div>
         </div>

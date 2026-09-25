@@ -20,36 +20,56 @@ export default function Navbar() {
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           className="pointer-events-auto flex items-center justify-between gap-6 sm:gap-8 px-5 sm:px-7 py-2.5 rounded-full bg-white/85 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:bg-white/95 transition-all duration-300"
         >
-          {/* Brand: Haven Orange Circular Icon */}
-          <Link to="/" className="flex items-center gap-2 group select-none">
-            <div className="w-5 h-5 rounded-full border-[3px] border-[#ea580c] flex items-center justify-center group-hover:scale-105 transition-transform">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#ea580c]" />
+          {/* Brand: FasalSethu Emblem */}
+          <Link to="/" className="flex items-center gap-2.5 group select-none">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-600 to-emerald-800 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform text-white">
+              <span className="text-base leading-none">🌱</span>
             </div>
-            <span className="font-display font-bold text-gray-900 text-base tracking-tight">Haven</span>
+            <div className="flex flex-col">
+              <span className="font-display font-black text-gray-900 text-base sm:text-lg tracking-tight leading-none">
+                Fasal<span className="text-green-600">Sethu</span>
+              </span>
+              <span className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider leading-none mt-0.5">
+                Marketplace
+              </span>
+            </div>
           </Link>
 
           {/* Desktop Nav Links */}
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-700">
-            <Link to="/" className="hover:text-black transition-colors">Home</Link>
-            <a href="#platform" className="hover:text-black transition-colors">Usecases</a>
-            <Link to="/buyer" className="hover:text-black transition-colors">Pricing</Link>
-            <Link to="/seller" className="hover:text-black transition-colors">Careers</Link>
-            <a href="#about" className="hover:text-black transition-colors">Contact</a>
+          <nav className="hidden lg:flex items-center gap-6 text-sm font-semibold text-gray-700">
+            <Link to="/" className="hover:text-green-700 transition-colors">Home</Link>
+            <Link to="/seller" className="hover:text-green-700 transition-colors flex items-center gap-1.5">
+              <span>Farmer Portal</span>
+              <span className="text-[10px] px-1.5 py-0.2 bg-green-100 text-green-800 rounded-full font-bold">Sell</span>
+            </Link>
+            <Link to="/buyer" className="hover:text-green-700 transition-colors flex items-center gap-1.5">
+              <span>Buyer Hub</span>
+              <span className="text-[10px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded-full font-bold">Source</span>
+            </Link>
+            <a href="/#markets" className="hover:text-green-700 transition-colors">Mandi Rates</a>
+            <a href="/#how" className="hover:text-green-700 transition-colors">How It Works</a>
           </nav>
 
-          {/* Right Action: Login Button */}
-          <div className="flex items-center gap-3">
+          {/* Right Action: Direct Portals */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link
               to="/seller"
-              className="px-5 py-1.5 rounded-full bg-[#131722] hover:bg-black text-white text-xs sm:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-green-200 bg-green-50/80 text-green-800 hover:bg-green-100 text-xs font-bold transition-all"
             >
-              Login
+              <span>👨‍🌾 For Farmers</span>
+            </Link>
+
+            <Link
+              to="/buyer"
+              className="px-4 py-1.5 rounded-full bg-green-700 hover:bg-green-800 text-white text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow"
+            >
+              🏢 Buyer Portal
             </Link>
 
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="md:hidden w-8 h-8 flex items-center justify-center rounded-full text-gray-700 hover:text-black transition-colors"
+              className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full text-gray-700 hover:text-black transition-colors"
               aria-label="Toggle Menu"
             >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -66,19 +86,32 @@ export default function Navbar() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.25 }}
-            className="fixed top-24 left-4 right-4 z-50 p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-white/60 shadow-2xl flex flex-col gap-4 md:hidden"
+            className="fixed top-24 left-4 right-4 z-50 p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-green-100 shadow-2xl flex flex-col gap-4 lg:hidden"
           >
-            <Link to="/" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Home</Link>
-            <a href="#platform" onClick={() => setMobileOpen(false)} className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Usecases</a>
-            <Link to="/buyer" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Pricing / Buyer Portal</Link>
-            <Link to="/seller" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Careers / Farmer Portal</Link>
-            <a href="#about" onClick={() => setMobileOpen(false)} className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Contact</a>
+            <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+              <span className="text-xl">🌱</span>
+              <span className="font-display font-black text-gray-900 text-lg">
+                Fasal<span className="text-green-600">Sethu</span>
+              </span>
+            </div>
+            <Link to="/" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100 hover:text-green-700">Home</Link>
+            <Link to="/seller" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100 flex items-center justify-between hover:text-green-700">
+              <span>🌾 Farmer Command Center</span>
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Sell Crops</span>
+            </Link>
+            <Link to="/buyer" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100 flex items-center justify-between hover:text-green-700">
+              <span>🏢 Buyer Sourcing Hub</span>
+              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Buy Direct</span>
+            </Link>
+            <a href="/#markets" onClick={() => setMobileOpen(false)} className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100 hover:text-green-700">
+              📊 Live APMC Mandi Rates
+            </a>
             <div className="pt-2 flex flex-col gap-2">
-              <Link to="/seller" className="w-full text-center py-3 rounded-full bg-[#131722] text-white font-semibold text-sm">
-                Login / Farmer Portal
+              <Link to="/seller" className="w-full text-center py-3 rounded-full bg-green-700 text-white font-bold text-sm shadow-sm">
+                Open Farmer Dashboard
               </Link>
-              <Link to="/buyer" className="w-full text-center py-3 rounded-full border border-gray-300 text-gray-800 font-semibold text-sm">
-                Buyer Portal
+              <Link to="/buyer" className="w-full text-center py-3 rounded-full border border-green-600 text-green-700 font-bold text-sm">
+                Open Buyer Dashboard
               </Link>
             </div>
           </motion.div>
