@@ -73,10 +73,69 @@ function validateBody(schema) {
   };
 }
 
+// Express middleware factory: validate req.query against a zod schema.
+function validateQuery(schema) {
+  return (req, res, next) => {
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      const err = new Error('Invalid query parameters');
+      err.status = 400;
+      err.details = parsed.error.flatten();
+      return next(err);
+    }
+    req.query = parsed.data;
+    return next();
+  };
+}
+
+// --- Farmer API schemas (B1 Task 2) ---
+// Clients must NOT set id / createdAt / updatedAt (.strict() rejects them)
+// and must NOT manipulate trustScore (excluded from both schemas).
+// kycStatus uses the DB default (PENDING) on create; updatable afterwards.
+const emailField = z
+  .string()
+  .trim()
+  .email('invalid email')
+  .optional()
+  .or(z.literal(''))
+  .transform((v) => (v === '' ? undefined : v));
+
+const farmerCreateSchema = z
+  .object({
+    name: z.string().trim().min(2, 'name is required (min 2 chars)'),
+    phone: z.string().trim().regex(phoneRegex, 'invalid phone format'),
+    email: emailField,
+    village: z.string().trim().optional(),
+    district: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    latitude: latSchema.optional(),
+    longitude: lngSchema.optional(),
+  })
+  .strict();
+
+const farmerUpdateSchema = farmerCreateSchema
+  .partial()
+  .extend({ kycStatus: kycSchema.optional() })
+  .strict();
+
+const paginationQuerySchema = z.object({
+  page: z.coerce.number().int('page must be an integer').min(1, 'page must be >= 1').default(1),
+  limit: z.coerce
+    .number()
+    .int('limit must be an integer')
+    .min(1, 'limit must be >= 1')
+    .max(100, 'limit must be <= 100')
+    .default(20),
+});
+
 module.exports = {
   farmerSchema,
   buyerSchema,
   cropListingSchema,
   buyerRequirementSchema,
+  farmerCreateSchema,
+  farmerUpdateSchema,
+  paginationQuerySchema,
   validateBody,
+  validateQuery,
 };

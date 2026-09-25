@@ -93,6 +93,22 @@ Expected (DB unconfigured):
 
 With a live DB: `"database": { "configured": true, "connected": true, "latencyMs": N }`.
 
+## Farmer API (B1 Task 2)
+
+Requires live `DATABASE_URL` (endpoints return `503` when unconfigured).
+
+| Method | Endpoint | Success |
+|---|---|---|
+| `POST` | `/api/farmers` | `201 { success: true, data }` |
+| `GET` | `/api/farmers?page=1&limit=20` | `200 { success: true, data, pagination }` |
+| `GET` | `/api/farmers/:id` | `200 { success: true, data }` |
+| `PATCH` | `/api/farmers/:id` | `200 { success: true, data }` |
+| `DELETE` | `/api/farmers/:id` | `200 { success: true, data }` |
+
+- Pagination: defaults `page=1, limit=20`, max `limit=100`; invalid values → `400`.
+- Create accepts only `name, phone, email?, village?, district?, state?, latitude?, longitude?` (`kycStatus` defaults to `PENDING`). Update additionally accepts `kycStatus`. `id/createdAt/updatedAt/trustScore` are rejected.
+- Errors: `400` validation, `404` not found, `409` duplicate email, via central error handler.
+
 ## Notes for next modules
 
 - Matching, maps, auth are NOT implemented here — only schema + validation placeholders.
