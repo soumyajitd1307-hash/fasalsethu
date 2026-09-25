@@ -1,3 +1,7 @@
+// The offer adapter's in-memory offer store is a test seam that is only
+// reachable when NODE_ENV=test, so opt in before the adapter is used.
+process.env.NODE_ENV = 'test';
+
 const { describe, test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 

@@ -1,9 +1,18 @@
-const { describe, test, before, after, beforeEach } = require('node:test');
+// The offer adapter's in-memory offer store is a test seam that is only
+// reachable when NODE_ENV=test, so opt in before the adapter is used.
+process.env.NODE_ENV = 'test';
+
+const { describe, test, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 
 const { createHarness } = require('./helpers/jwt-test-server');
-const { __setTestOffer, __clearTestOffers } = require('../src/services/offerAdapter');
+const {
+  __setTestOffer,
+  __clearTestOffers,
+  __resetOfferProvider,
+  registerOfferProvider,
+} = require('../src/services/offerAdapter');
 
 // Deal persistence is PostgreSQL-only (no in-memory fallback), so these
 // tests need a migrated database and use real persisted farmer/buyer IDs.
@@ -418,5 +427,117 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
     assert.equal(res.json.data.completedDeals, 1);
     assert.equal(res.json.data.totalVolumeQuintals, 100);
     assert.equal(res.json.data.settledValueRupees, 2000);
+  });
+
+  // The production Deal -> Offer dependency: a registered offer provider is the
+  // only source of accepted offers outside tests, and deal creation must work
+  // through it without any in-memory offer record.
+  describe('offer provider (production path)', () => {
+    const providerOffers = new Map();
+
+    beforeEach(() => {
+      providerOffers.clear();
+      registerOfferProvider({
+        getOfferById: async (id) => providerOffers.get(id) || null,
+      });
+    });
+
+    afterEach(() => {
+      // Restore the environment first: a test may have switched it to
+      // 'production' to assert that the test offer store is unreachable.
+      process.env.NODE_ENV = 'test';
+      __resetOfferProvider();
+    });
+
+    test('16. POST /api/deals creates a persisted deal from a registered provider', async () => {
+      const { farmerId, buyerId } = await makeParties('P1');
+      const offerId = `PROVIDER-ACCEPTED-${TS}`;
+      providerOffers.set(offerId, {
+        offerId,
+        farmerId,
+        buyerId,
+        cropName: 'Soybean',
+        quantity: 40,
+        unit: 'quintal',
+        offeredPrice: 45,
+        status: 'ACCEPTED',
+      });
+
+      const res = await api('POST', '/api/deals', { offerId }, await anyAuthHeaders());
+
+      assert.equal(res.status, 201);
+      assert.equal(res.json.data.offerId, offerId);
+      assert.equal(res.json.data.farmerId, farmerId);
+      assert.equal(res.json.data.buyerId, buyerId);
+      assert.equal(res.json.data.cropName, 'Soybean');
+      assert.equal(res.json.data.agreedPrice, 45);
+      assert.equal(res.json.data.totalAmount, 1800);
+
+      // The deal really is in PostgreSQL, not an in-memory fake.
+      const { getPrisma } = require('../src/config/database');
+      const stored = await getPrisma().deal.findUnique({ where: { offerId } });
+      assert.ok(stored, 'deal row must exist in PostgreSQL');
+      assert.equal(stored.status, 'ACCEPTED');
+    });
+
+    test('17. POST /api/deals rejects a provider offer that is not ACCEPTED', async () => {
+      const { farmerId, buyerId } = await makeParties('P2');
+      const offerId = `PROVIDER-PENDING-${TS}`;
+      providerOffers.set(offerId, {
+        offerId,
+        farmerId,
+        buyerId,
+        quantity: 10,
+        offeredPrice: 20,
+        status: 'NEGOTIATING',
+      });
+
+      const res = await api('POST', '/api/deals', { offerId }, await anyAuthHeaders());
+
+      assert.equal(res.status, 400);
+      assert.match(res.json.message, /must be 'ACCEPTED'/);
+    });
+
+    test('18. POST /api/deals returns 404 when the provider has no such offer', async () => {
+      const res = await api(
+        'POST',
+        '/api/deals',
+        { offerId: `PROVIDER-ABSENT-${TS}` },
+        await anyAuthHeaders()
+      );
+
+      assert.equal(res.status, 404);
+      assert.match(res.json.message, /Offer not found/);
+    });
+
+    test('19. in production, an unconfigured offer provider fails closed with 503 and stores nothing', async () => {
+      const offerId = `PROVIDER-UNCONFIGURED-${TS}`;
+      __resetOfferProvider();
+      process.env.NODE_ENV = 'production';
+
+      // Even a well-formed offer cannot be smuggled in: the test store is
+      // unreachable in production.
+      assert.throws(
+        () =>
+          __setTestOffer({
+            offerId,
+            farmerId: 'F-SMUGGLE',
+            buyerId: 'B-SMUGGLE',
+            quantity: 1,
+            offeredPrice: 1,
+            status: 'ACCEPTED',
+          }),
+        /test-only helper/
+      );
+
+      const res = await api('POST', '/api/deals', { offerId }, await anyAuthHeaders());
+
+      assert.equal(res.status, 503);
+      assert.match(res.json.message, /No offer provider is registered/);
+
+      const { getPrisma } = require('../src/config/database');
+      const stored = await getPrisma().deal.findUnique({ where: { offerId } });
+      assert.equal(stored, null, 'no deal row may be created without a real offer');
+    });
   });
 });

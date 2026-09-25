@@ -8,18 +8,19 @@ Product terminology: **Buyer = Retailer**. The database/API models keep the name
 
 ```text
 backend/
-  prisma/schema.prisma      # Farmer, Buyer, CropListing, BuyerRequirement + relations
+  prisma/schema.prisma      # Farmer, Buyer, CropListing, BuyerRequirement, MarketPrice, Deal, Notification
+  prisma/migrations/        # 2 migrations: init marketplace schema, deal + notification tables
   src/
-    config/env.js           # PORT / DATABASE_URL / CORS_ORIGIN
+    config/env.js           # PORT / DATABASE_URL / CORS_ORIGIN / Auth0 issuer+audience
     config/database.js      # Prisma singleton + checkConnection()
-    controllers/healthController.js
-    routes/health.routes.js # GET /api/health
-    services/dbService.js
-    models/index.js         # Prisma is source of truth (see schema)
-    middleware/notFound.js, errorHandler.js
-    utils/validate.js       # zod schemas for 4 entities
+    controllers/            # thin controllers per entity (farmer, cropListing, buyer, …, deal, notification)
+    routes/                 # one router per entity, mounted in app.js
+    services/               # business logic (incl. dealService, notificationService, offerAdapter)
+    middleware/             # auth.js (Auth0/JWKS), errorHandler.js, notFound.js
+    utils/validate.js       # zod schemas
     app.js                  # express app (cors, json, /api/health, 404, errors)
     server.js               # listen + graceful shutdown
+  tests/                    # node:test suites (unit.*, integration.*, helpers/jwt-test-server.js)
 ```
 
 ## Prerequisites
@@ -119,9 +120,10 @@ With a live DB: `"database": { "configured": true, "connected": true, "latencyMs
 No external test framework — the suite uses Node's built-in `node:test` + `node:assert` (zero new dependencies, no internet needed; all HTTP tests hit `127.0.0.1` only).
 
 ```bash
-npm test                # unit + integration (integration needs DATABASE_URL)
-npm run test:unit        # validation / normalization / CSV only, always runnable
+npm test                # unit + integration (DB-backed tests need DATABASE_URL)
+npm run test:unit       # validation, normalization, auth, matching, offers, deals, notifications
 npm run test:integration # live API tests, requires DATABASE_URL
+npm run test:b3         # B3 only: offer adapter, deals, notifications
 ```
 
 - `npm test` exits `0` on success, non-zero on any failure, with readable `✔/✖` output.
@@ -224,9 +226,53 @@ curl "http://localhost:8000/api/market-prices/context?commodity=Onion&state=Maha
 - No live Agmarknet fetch/scheduler yet (manual CSV/API-row import only).
 - Same-key correction rows update prices in place; history of corrections is not kept.
 - Text search is `contains`-insensitive (no full-text index yet).
-- Buyer matching, offers, logistics, maps, weather, auth are out of scope.
+
+## Deal API (B3) and the offer dependency
+
+Deals and in-app notifications are implemented and PostgreSQL-only (no in-memory fallback).
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| `POST` | `/api/deals` | `201`; body `{ offerId, pickupLocation?, deliveryLocation? }`; one deal per offer (`409` on duplicate) |
+| `GET` | `/api/deals?status=&farmerId=&buyerId=&page=&limit=` | `200 { success, data, pagination }` |
+| `GET` | `/api/deals/summary?farmerId=…` or `?buyerId=…` | aggregated counts/volume/settled value |
+| `GET` | `/api/deals/farmer/:farmerId`, `/api/deals/buyer/:buyerId` | participant history, paginated |
+| `GET` | `/api/deals/:id` | `200`; includes limited farmer/buyer details |
+| `PATCH` | `/api/deals/:id/status` | `ACCEPTED → CONFIRMED → IN_PROGRESS → COMPLETED` (`CANCELLED` from any non-terminal state); invalid jump → `400` |
+| `PATCH` | `/api/deals/:id/cancel` | records `cancellationReason` |
+
+- `totalAmount = quantity × agreedPrice` is always computed server-side; client totals are ignored. Deal status changes and cancellations emit buyer + farmer notifications.
+- All `/api/deals/*` and `/api/notifications/*` routes require a verified Auth0 JWT (see Authentication) and enforce participant/ownership checks (`403` on mismatch). `GET /api/deals/:id`, status updates and cancellation are restricted to the deal's farmer or buyer.
+
+### What `offerId` is (and is not)
+
+- A Deal is only created from an **already-accepted offer**. `offerId` is the opaque business key of that accepted offer. It is the duplicate-deal guard (`deals.offer_id` is `UNIQUE`) and is echoed onto the deal's notifications.
+- It is **not** a foreign key. There is no `offers` table in this repository, and there is no `OfferService` — none has ever existed on any branch.
+- **Neither B1 nor B2 produces offers.** B1 persists crop listings, requirements and mandi prices. B2 (`matchingService`, `priceDiscoveryService`) is read-only: it computes match scores and price comparisons and writes nothing. A match score is not an offer, so matching does not imply one.
+- The product flow that produces accepted offers is the **negotiation / connection module** (`docs/API_CONTRACT_M5.md` §4: `PROPOSE_DEAL → COUNTER_OFFER → ACCEPT_DEAL → COMPLETE_DEAL`). That module has its own data model and is not implemented in this backend yet. No backend endpoint creates, reads or accepts an offer, and the frontend does not call an offer API.
+
+### The provider seam (`src/services/offerAdapter.js`)
+
+`offerAdapter` is the integration boundary, not a stub database. The negotiation module registers a real provider:
+
+```js
+const { registerOfferProvider } = require('./services/offerAdapter');
+
+registerOfferProvider({
+  async getOfferById(offerId) {
+    // return the accepted offer, or null when it does not exist
+    return { offerId, farmerId, buyerId, cropName, quantity, unit, offeredPrice, status: 'ACCEPTED' };
+  },
+});
+```
+
+`POST /api/deals` then resolves and validates the offer (status must be `ACCEPTED`; `farmerId`/`buyerId` required; `quantity` and price must be positive) and persists the deal.
+
+- **Production safety:** the adapter never fabricates an offer and never falls back to in-memory data. With no provider registered it fails loudly with `503 OFFER_PROVIDER_NOT_CONFIGURED`, so a deployed `POST /api/deals` returns 503 until the negotiation module is wired — it does not invent offers. A registered provider that has no such offer returns `404`; an offer whose status is not `ACCEPTED` returns `400`.
+- **Test seam:** the only in-memory offer store (`__setTestOffer` / `__clearTestOffers` / `__resetOfferProvider`) is reachable **only when `NODE_ENV=test`** and throws in every other environment, so no fake offer record can exist in a deployed environment. Unit/integration tests set `process.env.NODE_ENV = 'test'` for this reason.
 
 ## Notes for next modules
 
-- Matching, maps, auth are NOT implemented here — only schema + validation placeholders.
+- Matching (B2), price discovery, deal and notification (B3) APIs, and Auth0 JWT auth **are** implemented; see the sections above.
+- Not implemented: the negotiation / connection module that produces accepted offers (`docs/API_CONTRACT_M5.md` §4), logistics/e-way-bill, escrow webhooks, maps, and weather.
 - Use `validateBody(schema)` from `src/utils/validate.js` in future POST/PUT routes.

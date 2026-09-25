@@ -2,7 +2,9 @@
  * Deal & Transaction Service (B3 Task)
  *
  * Core business logic for agricultural deals / transactions:
- * 1. Consumes accepted offers via B2 OfferAdapter.
+ * 1. Resolves an already-accepted offer through the offerAdapter seam (the
+ *    accepted-offer source is the negotiation/connection module — see
+ *    offerAdapter.js; neither B1 nor B2 produces offers).
  * 2. Enforces duplicate deal protection (409 Conflict).
  * 3. Calculates total transaction value server-side: totalAmount = quantity * agreedPrice.
  * 4. Enforces the deal status lifecycle state machine:
@@ -108,9 +110,10 @@ function validateStatusTransition(currentStatus, targetStatus) {
 }
 
 /**
- * Creates a binding Deal from an accepted B2 offer.
+ * Creates a binding Deal from an accepted offer.
  * @param {Object} input
- * @param {string} input.offerId
+ * @param {string} input.offerId - business key of an already-accepted offer
+ *   (resolved via the offerAdapter seam; not a local foreign key)
  * @param {string} [input.pickupLocation]
  * @param {string} [input.deliveryLocation]
  * @param {Object} [actorUser] - Authenticated user context
@@ -131,7 +134,7 @@ async function createDeal(input, actorUser = null) {
     throw conflict(`Deal already exists for offer: ${cleanOfferId} (Deal ID: ${existing.id})`);
   }
 
-  // 2. Fetch and validate accepted offer from B2 adapter
+  // 2. Fetch and validate the accepted offer through the adapter seam
   const offer = await getAcceptedOffer(cleanOfferId);
 
   // 3. Server-side transaction calculation (never trust client)
