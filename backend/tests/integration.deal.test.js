@@ -3,11 +3,42 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 
 const app = require('../src/app');
-const dealService = require('../src/services/dealService');
+const farmerService = require('../src/services/farmerService');
+const buyerService = require('../src/services/buyerService');
 const { __setTestOffer, __clearTestOffers } = require('../src/services/offerAdapter');
-const { __clearTestNotifications } = require('../src/services/notificationService');
 
-describe('B3 Deal & Notification API Integration Tests', () => {
+// Deal persistence is PostgreSQL-only (no in-memory fallback), so these
+// tests need a migrated database and use real persisted farmer/buyer IDs.
+const HAVE_DB = !!process.env.DATABASE_URL;
+const SKIP_DB = HAVE_DB ? false : 'BLOCKED: DATABASE_URL not set — needs local PostgreSQL';
+const TS = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+
+const created = { farmers: [], buyers: [], userIds: [] };
+
+async function makeParties(tag) {
+  const phoneF = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+  const phoneB = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+  const farmer = await farmerService.createFarmer({
+    name: `API Deal Farmer ${tag}`,
+    phone: phoneF,
+    email: `api-deal-f-${tag}-${TS}@example.com`,
+  });
+  const buyer = await buyerService.createBuyer({
+    name: `API Deal Buyer ${tag}`,
+    phone: phoneB,
+    email: `api-deal-b-${tag}-${TS}@example.com`,
+  });
+  created.farmers.push(farmer.id);
+  created.buyers.push(buyer.id);
+  created.userIds.push(farmer.id, buyer.id);
+  return { farmerId: farmer.id, buyerId: buyer.id };
+}
+
+function authHeaders(userId, role) {
+  return { 'x-user-id': userId, 'x-user-role': role };
+}
+
+describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () => {
   let server;
   let baseUrl;
 
@@ -20,15 +51,31 @@ describe('B3 Deal & Notification API Integration Tests', () => {
     });
   });
 
-  after((_, done) => {
-    if (server) server.close(done);
-    else done();
+  after(async () => {
+    try {
+      const { getPrisma } = require('../src/config/database');
+      const prisma = getPrisma();
+      if (created.userIds.length > 0) {
+        await prisma.notification.deleteMany({ where: { userId: { in: created.userIds } } });
+      }
+      for (const id of created.farmers) {
+        await prisma.farmer.deleteMany({ where: { id } }); // cascades deals
+      }
+      for (const id of created.buyers) {
+        await prisma.buyer.deleteMany({ where: { id } });
+      }
+      await prisma.$disconnect();
+    } catch (err) {
+      console.warn(`cleanup warning (test data may remain): ${err.message}`);
+    }
+    await new Promise((resolve) => {
+      if (server) server.close(resolve);
+      else resolve();
+    });
   });
 
   beforeEach(() => {
-    dealService.__clearTestDeals();
     __clearTestOffers();
-    __clearTestNotifications();
   });
 
   async function api(method, path, body = null, headers = {}) {
@@ -50,11 +97,18 @@ describe('B3 Deal & Notification API Integration Tests', () => {
     return { status: res.status, json };
   }
 
+  function assertNoLeak(json, label) {
+    assert.ok(json && typeof json === 'object', `${label}: expected JSON body`);
+    assert.ok(!('code' in json), `${label}: leaked Prisma error code`);
+    assert.match(JSON.stringify(json), /^((?!P[12]\d{3}).)*$/s, `${label}: leaked Prisma code`);
+  }
+
   test('1. POST /api/deals creates a deal from an accepted offer and calculates totalAmount', async () => {
+    const { farmerId, buyerId } = await makeParties('A1');
     __setTestOffer({
-      offerId: 'OFFER-001',
-      farmerId: 'FARMER-1',
-      buyerId: 'BUYER-1',
+      offerId: `OFFER-001-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Nashik Red Onion',
       quantity: 500,
       offeredPrice: 28,
@@ -62,16 +116,16 @@ describe('B3 Deal & Notification API Integration Tests', () => {
     });
 
     const res = await api('POST', '/api/deals', {
-      offerId: 'OFFER-001',
+      offerId: `OFFER-001-${TS}`,
       pickupLocation: 'Lasalgaon Mandi Yard',
       deliveryLocation: 'Vashi Warehouse Hub',
     });
 
     assert.equal(res.status, 201);
     assert.equal(res.json.success, true);
-    assert.equal(res.json.data.offerId, 'OFFER-001');
-    assert.equal(res.json.data.farmerId, 'FARMER-1');
-    assert.equal(res.json.data.buyerId, 'BUYER-1');
+    assert.equal(res.json.data.offerId, `OFFER-001-${TS}`);
+    assert.equal(res.json.data.farmerId, farmerId);
+    assert.equal(res.json.data.buyerId, buyerId);
     assert.equal(res.json.data.quantity, 500);
     assert.equal(res.json.data.agreedPrice, 28);
     // 500 * 28 = 14000
@@ -86,52 +140,56 @@ describe('B3 Deal & Notification API Integration Tests', () => {
   });
 
   test('3. POST /api/deals rejects if offer is not accepted (400)', async () => {
+    const { farmerId, buyerId } = await makeParties('A3');
     __setTestOffer({
-      offerId: 'OFFER-REJECTED',
-      farmerId: 'FARMER-1',
-      buyerId: 'BUYER-1',
+      offerId: `OFFER-REJECTED-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Wheat',
       quantity: 100,
       offeredPrice: 20,
       status: 'REJECTED',
     });
 
-    const res = await api('POST', '/api/deals', { offerId: 'OFFER-REJECTED' });
+    const res = await api('POST', '/api/deals', { offerId: `OFFER-REJECTED-${TS}` });
     assert.equal(res.status, 400);
     assert.match(res.json.message, /must be 'ACCEPTED'/);
   });
 
   test('4. POST /api/deals duplicate deal protection rejects second creation attempt (409 Conflict)', async () => {
+    const { farmerId, buyerId } = await makeParties('A4');
     __setTestOffer({
-      offerId: 'OFFER-DUP',
-      farmerId: 'FARMER-1',
-      buyerId: 'BUYER-1',
+      offerId: `OFFER-DUP-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Potato',
       quantity: 250,
       offeredPrice: 16,
       status: 'ACCEPTED',
     });
 
-    const first = await api('POST', '/api/deals', { offerId: 'OFFER-DUP' });
+    const first = await api('POST', '/api/deals', { offerId: `OFFER-DUP-${TS}` });
     assert.equal(first.status, 201);
 
-    const second = await api('POST', '/api/deals', { offerId: 'OFFER-DUP' });
+    const second = await api('POST', '/api/deals', { offerId: `OFFER-DUP-${TS}` });
     assert.equal(second.status, 409);
     assert.match(second.json.message, /Deal already exists/);
+    assertNoLeak(second.json, 'duplicate deal');
   });
 
   test('5. GET /api/deals/:id retrieves single deal details', async () => {
+    const { farmerId, buyerId } = await makeParties('A5');
     __setTestOffer({
-      offerId: 'OFFER-GET',
-      farmerId: 'FARMER-1',
-      buyerId: 'BUYER-1',
+      offerId: `OFFER-GET-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Soybean',
       quantity: 50,
       offeredPrice: 48,
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: 'OFFER-GET' });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-GET-${TS}` });
     const dealId = created.json.data.id;
 
     const res = await api('GET', `/api/deals/${dealId}`);
@@ -141,17 +199,18 @@ describe('B3 Deal & Notification API Integration Tests', () => {
   });
 
   test('6. PATCH /api/deals/:id/status lifecycle: CONFIRMED -> IN_PROGRESS -> COMPLETED', async () => {
+    const { farmerId, buyerId } = await makeParties('A6');
     __setTestOffer({
-      offerId: 'OFFER-STATUS',
-      farmerId: 'FARMER-1',
-      buyerId: 'BUYER-1',
+      offerId: `OFFER-STATUS-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Cotton',
       quantity: 80,
       offeredPrice: 70,
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: 'OFFER-STATUS' });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-STATUS-${TS}` });
     const dealId = created.json.data.id;
 
     // 1. CONFIRMED
@@ -172,17 +231,18 @@ describe('B3 Deal & Notification API Integration Tests', () => {
   });
 
   test('7. PATCH /api/deals/:id/status rejects invalid transitions (400)', async () => {
+    const { farmerId, buyerId } = await makeParties('A7');
     __setTestOffer({
-      offerId: 'OFFER-INVALID',
-      farmerId: 'FARMER-1',
-      buyerId: 'BUYER-1',
+      offerId: `OFFER-INVALID-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Tomato',
       quantity: 100,
       offeredPrice: 20,
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: 'OFFER-INVALID' });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-INVALID-${TS}` });
     const dealId = created.json.data.id;
 
     // Direct jump ACCEPTED -> COMPLETED is forbidden
@@ -192,17 +252,18 @@ describe('B3 Deal & Notification API Integration Tests', () => {
   });
 
   test('8. PATCH /api/deals/:id/cancel cancels deal and records reason', async () => {
+    const { farmerId, buyerId } = await makeParties('A8');
     __setTestOffer({
-      offerId: 'OFFER-CANCEL',
-      farmerId: 'FARMER-1',
-      buyerId: 'BUYER-1',
+      offerId: `OFFER-CANCEL-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Maize',
       quantity: 120,
       offeredPrice: 19,
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: 'OFFER-CANCEL' });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-CANCEL-${TS}` });
     const dealId = created.json.data.id;
 
     const res = await api('PATCH', `/api/deals/${dealId}/cancel`, {
@@ -214,52 +275,49 @@ describe('B3 Deal & Notification API Integration Tests', () => {
   });
 
   test('9. Farmer can retrieve own deals: GET /api/deals/farmer/:farmerId', async () => {
+    const { farmerId, buyerId } = await makeParties('A9');
     __setTestOffer({
-      offerId: 'OFFER-FARMER',
-      farmerId: 'FARMER-A',
-      buyerId: 'BUYER-A',
+      offerId: `OFFER-FARMER-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Rice',
       quantity: 200,
       offeredPrice: 32,
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: 'OFFER-FARMER' });
+    await api('POST', '/api/deals', { offerId: `OFFER-FARMER-${TS}` });
 
-    const res = await api('GET', '/api/deals/farmer/FARMER-A', null, {
-      'x-user-id': 'FARMER-A',
-      'x-user-role': 'farmer',
-    });
+    const res = await api('GET', `/api/deals/farmer/${farmerId}`, null, authHeaders(farmerId, 'farmer'));
     assert.equal(res.status, 200);
     assert.equal(res.json.data.length, 1);
-    assert.equal(res.json.data[0].farmerId, 'FARMER-A');
+    assert.equal(res.json.data[0].farmerId, farmerId);
   });
 
   test('10. Buyer can retrieve own deals: GET /api/deals/buyer/:buyerId', async () => {
+    const { farmerId, buyerId } = await makeParties('A10');
     __setTestOffer({
-      offerId: 'OFFER-BUYER',
-      farmerId: 'FARMER-B',
-      buyerId: 'BUYER-B',
+      offerId: `OFFER-BUYER-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Wheat',
       quantity: 400,
       offeredPrice: 24,
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: 'OFFER-BUYER' });
+    await api('POST', '/api/deals', { offerId: `OFFER-BUYER-${TS}` });
 
-    const res = await api('GET', '/api/deals/buyer/BUYER-B', null, {
-      'x-user-id': 'BUYER-B',
-      'x-user-role': 'buyer',
-    });
+    const res = await api('GET', `/api/deals/buyer/${buyerId}`, null, authHeaders(buyerId, 'buyer'));
     assert.equal(res.status, 200);
     assert.equal(res.json.data.length, 1);
-    assert.equal(res.json.data[0].buyerId, 'BUYER-B');
+    assert.equal(res.json.data[0].buyerId, buyerId);
   });
 
   test('11. Unauthorized access to another user deals is rejected (403 Forbidden)', async () => {
-    // Impostor farmer trying to spy on FARMER-SECRET deals
-    const res = await api('GET', '/api/deals/farmer/FARMER-SECRET', null, {
+    // Impostor farmer trying to spy on another farmer's deals
+    const { farmerId } = await makeParties('A11');
+    const res = await api('GET', `/api/deals/farmer/${farmerId}`, null, {
       'x-user-id': 'IMPOSTOR-FARMER',
       'x-user-role': 'farmer',
     });
@@ -268,31 +326,28 @@ describe('B3 Deal & Notification API Integration Tests', () => {
   });
 
   test('12. Deal creation automatically creates notifications for both parties', async () => {
+    const { farmerId, buyerId } = await makeParties('A12');
     __setTestOffer({
-      offerId: 'OFFER-NOTIFS',
-      farmerId: 'FARMER-N',
-      buyerId: 'BUYER-N',
+      offerId: `OFFER-NOTIFS-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Sunflower',
       quantity: 60,
       offeredPrice: 55,
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: 'OFFER-NOTIFS' });
+    await api('POST', '/api/deals', { offerId: `OFFER-NOTIFS-${TS}` });
 
-    const farmerNotifs = await api('GET', '/api/notifications', null, {
-      'x-user-id': 'FARMER-N',
-    });
+    const farmerNotifs = await api('GET', '/api/notifications', null, authHeaders(farmerId, 'farmer'));
     assert.equal(farmerNotifs.status, 200);
     assert.equal(farmerNotifs.json.data.length, 1);
-    assert.equal(farmerNotifs.json.data[0].userId, 'FARMER-N');
+    assert.equal(farmerNotifs.json.data[0].userId, farmerId);
 
-    const buyerNotifs = await api('GET', '/api/notifications', null, {
-      'x-user-id': 'BUYER-N',
-    });
+    const buyerNotifs = await api('GET', '/api/notifications', null, authHeaders(buyerId, 'buyer'));
     assert.equal(buyerNotifs.status, 200);
     assert.equal(buyerNotifs.json.data.length, 1);
-    assert.equal(buyerNotifs.json.data[0].userId, 'BUYER-N');
+    assert.equal(buyerNotifs.json.data[0].userId, buyerId);
   });
 
   test('13. Unauthenticated request to GET /api/notifications is rejected (401)', async () => {
@@ -301,48 +356,46 @@ describe('B3 Deal & Notification API Integration Tests', () => {
   });
 
   test('14. PATCH /api/notifications/:id/read marks notification as read', async () => {
+    const { farmerId, buyerId } = await makeParties('A14');
     __setTestOffer({
-      offerId: 'OFFER-READ',
-      farmerId: 'FARMER-R',
-      buyerId: 'BUYER-R',
+      offerId: `OFFER-READ-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Mustard',
       quantity: 90,
       offeredPrice: 50,
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: 'OFFER-READ' });
+    await api('POST', '/api/deals', { offerId: `OFFER-READ-${TS}` });
 
-    const list = await api('GET', '/api/notifications', null, {
-      'x-user-id': 'FARMER-R',
-    });
+    const list = await api('GET', '/api/notifications', null, authHeaders(farmerId, 'farmer'));
     const notifId = list.json.data[0].id;
     assert.equal(list.json.data[0].read, false);
 
-    const markRes = await api('PATCH', `/api/notifications/${notifId}/read`, null, {
-      'x-user-id': 'FARMER-R',
-    });
+    const markRes = await api('PATCH', `/api/notifications/${notifId}/read`, null, authHeaders(farmerId, 'farmer'));
     assert.equal(markRes.status, 200);
     assert.equal(markRes.json.data.read, true);
   });
 
   test('15. GET /api/deals/summary returns aggregated analytics', async () => {
+    const { farmerId, buyerId } = await makeParties('A15');
     __setTestOffer({
-      offerId: 'OFFER-SUM1',
-      farmerId: 'FARMER-SUM',
-      buyerId: 'BUYER-SUM',
+      offerId: `OFFER-SUM1-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Potato',
       quantity: 100,
       offeredPrice: 20,
       status: 'ACCEPTED',
     });
 
-    const d = await api('POST', '/api/deals', { offerId: 'OFFER-SUM1' });
+    const d = await api('POST', '/api/deals', { offerId: `OFFER-SUM1-${TS}` });
     await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'CONFIRMED' });
     await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'IN_PROGRESS' });
     await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'COMPLETED' });
 
-    const res = await api('GET', '/api/deals/summary?farmerId=FARMER-SUM');
+    const res = await api('GET', `/api/deals/summary?farmerId=${farmerId}`);
     assert.equal(res.status, 200);
     assert.equal(res.json.data.totalDeals, 1);
     assert.equal(res.json.data.completedDeals, 1);

@@ -1,28 +1,80 @@
-const { describe, test, beforeEach } = require('node:test');
+const { describe, test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const dealService = require('../src/services/dealService');
+const farmerService = require('../src/services/farmerService');
+const buyerService = require('../src/services/buyerService');
 const {
   __setTestOffer,
   __clearTestOffers,
 } = require('../src/services/offerAdapter');
 const {
-  __clearTestNotifications,
   getUserNotifications,
 } = require('../src/services/notificationService');
 
-describe('B3 Deal Service Unit Tests', () => {
+// Deal persistence is PostgreSQL-only (no in-memory fallback), so these
+// tests need a migrated database and use real persisted farmer/buyer IDs.
+const HAVE_DB = !!process.env.DATABASE_URL;
+const SKIP_DB = HAVE_DB ? false : 'BLOCKED: DATABASE_URL not set — needs local PostgreSQL';
+const TS = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+
+const created = { farmers: [], buyers: [], userIds: [] };
+
+async function makeParties(tag) {
+  const phoneF = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+  const phoneB = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+  const farmer = await farmerService.createFarmer({
+    name: `Deal Test Farmer ${tag}`,
+    phone: phoneF,
+    email: `deal-f-${tag}-${TS}@example.com`,
+  });
+  const buyer = await buyerService.createBuyer({
+    name: `Deal Test Buyer ${tag}`,
+    phone: phoneB,
+    email: `deal-b-${tag}-${TS}@example.com`,
+  });
+  created.farmers.push(farmer.id);
+  created.buyers.push(buyer.id);
+  created.userIds.push(farmer.id, buyer.id);
+  return { farmerId: farmer.id, buyerId: buyer.id };
+}
+
+describe('B3 Deal Service Unit Tests', { skip: SKIP_DB }, () => {
+  before(async () => {
+    // Fail loudly if DATABASE_URL is set but unreachable/unmigrated.
+    const { getPrisma } = require('../src/config/database');
+    await getPrisma().$queryRaw`SELECT 1`;
+  });
+
+  after(async () => {
+    try {
+      const { getPrisma } = require('../src/config/database');
+      const prisma = getPrisma();
+      if (created.userIds.length > 0) {
+        await prisma.notification.deleteMany({ where: { userId: { in: created.userIds } } });
+      }
+      for (const id of created.farmers) {
+        await prisma.farmer.deleteMany({ where: { id } }); // cascades deals
+      }
+      for (const id of created.buyers) {
+        await prisma.buyer.deleteMany({ where: { id } });
+      }
+      await prisma.$disconnect();
+    } catch (err) {
+      console.warn(`cleanup warning (test data may remain): ${err.message}`);
+    }
+  });
+
   beforeEach(() => {
-    dealService.__clearTestDeals();
     __clearTestOffers();
-    __clearTestNotifications();
   });
 
   test('1. Creates deal from accepted offer with server-side totalAmount calculation', async () => {
+    const { farmerId, buyerId } = await makeParties('T1');
     __setTestOffer({
-      offerId: 'O-101',
-      farmerId: 'F-101',
-      buyerId: 'B-201',
+      offerId: `O-101-${TS}`,
+      farmerId,
+      buyerId,
       cropId: 'C-301',
       cropName: 'Tomato Hybrid',
       quantity: 500,
@@ -31,14 +83,14 @@ describe('B3 Deal Service Unit Tests', () => {
     });
 
     const deal = await dealService.createDeal({
-      offerId: 'O-101',
+      offerId: `O-101-${TS}`,
       pickupLocation: 'Farm Gate, Dindori',
     });
 
     assert.ok(deal.id);
-    assert.equal(deal.offerId, 'O-101');
-    assert.equal(deal.farmerId, 'F-101');
-    assert.equal(deal.buyerId, 'B-201');
+    assert.equal(deal.offerId, `O-101-${TS}`);
+    assert.equal(deal.farmerId, farmerId);
+    assert.equal(deal.buyerId, buyerId);
     assert.equal(deal.cropName, 'Tomato Hybrid');
     assert.equal(deal.quantity, 500);
     assert.equal(deal.agreedPrice, 28);
@@ -62,10 +114,11 @@ describe('B3 Deal Service Unit Tests', () => {
   });
 
   test('3. Rejects deal creation if offer is not in ACCEPTED status (400)', async () => {
+    const { farmerId, buyerId } = await makeParties('T3');
     __setTestOffer({
-      offerId: 'O-PENDING',
-      farmerId: 'F-101',
-      buyerId: 'B-201',
+      offerId: `O-PENDING-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Wheat',
       quantity: 100,
       offeredPrice: 22,
@@ -74,7 +127,7 @@ describe('B3 Deal Service Unit Tests', () => {
 
     await assert.rejects(
       async () => {
-        await dealService.createDeal({ offerId: 'O-PENDING' });
+        await dealService.createDeal({ offerId: `O-PENDING-${TS}` });
       },
       (err) => {
         assert.equal(err.status, 400);
@@ -85,22 +138,23 @@ describe('B3 Deal Service Unit Tests', () => {
   });
 
   test('4. Prevents duplicate deals for the same accepted offer (409 Conflict)', async () => {
+    const { farmerId, buyerId } = await makeParties('T4');
     __setTestOffer({
-      offerId: 'O-DUP',
-      farmerId: 'F-101',
-      buyerId: 'B-201',
+      offerId: `O-DUP-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Onion',
       quantity: 200,
       offeredPrice: 15,
       status: 'ACCEPTED',
     });
 
-    const firstDeal = await dealService.createDeal({ offerId: 'O-DUP' });
+    const firstDeal = await dealService.createDeal({ offerId: `O-DUP-${TS}` });
     assert.ok(firstDeal.id);
 
     await assert.rejects(
       async () => {
-        await dealService.createDeal({ offerId: 'O-DUP' });
+        await dealService.createDeal({ offerId: `O-DUP-${TS}` });
       },
       (err) => {
         assert.equal(err.status, 409);
@@ -111,33 +165,35 @@ describe('B3 Deal Service Unit Tests', () => {
   });
 
   test('5. Accurately calculates total amount server-side including decimal prices', async () => {
+    const { farmerId, buyerId } = await makeParties('T5');
     __setTestOffer({
-      offerId: 'O-CALC',
-      farmerId: 'F-102',
-      buyerId: 'B-202',
+      offerId: `O-CALC-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Soybean',
       quantity: 125.5,
       offeredPrice: 42.75,
       status: 'ACCEPTED',
     });
 
-    const deal = await dealService.createDeal({ offerId: 'O-CALC' });
+    const deal = await dealService.createDeal({ offerId: `O-CALC-${TS}` });
     // 125.5 * 42.75 = 5365.125 -> 5365.13
     assert.equal(deal.totalAmount, 5365.13);
   });
 
   test('6. Validates deal status lifecycle flow: ACCEPTED -> CONFIRMED -> IN_PROGRESS -> COMPLETED', async () => {
+    const { farmerId, buyerId } = await makeParties('T6');
     __setTestOffer({
-      offerId: 'O-FLOW',
-      farmerId: 'F-101',
-      buyerId: 'B-201',
+      offerId: `O-FLOW-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Potato',
       quantity: 300,
       offeredPrice: 18,
       status: 'ACCEPTED',
     });
 
-    const deal = await dealService.createDeal({ offerId: 'O-FLOW' });
+    const deal = await dealService.createDeal({ offerId: `O-FLOW-${TS}` });
     assert.equal(deal.status, 'ACCEPTED');
 
     // 1. CONFIRMED
@@ -155,17 +211,18 @@ describe('B3 Deal Service Unit Tests', () => {
   });
 
   test('7. Rejects nonsensical and skipped status transitions (400)', async () => {
+    const { farmerId, buyerId } = await makeParties('T7');
     __setTestOffer({
-      offerId: 'O-JUMP',
-      farmerId: 'F-101',
-      buyerId: 'B-201',
+      offerId: `O-JUMP-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Potato',
       quantity: 300,
       offeredPrice: 18,
       status: 'ACCEPTED',
     });
 
-    const deal = await dealService.createDeal({ offerId: 'O-JUMP' });
+    const deal = await dealService.createDeal({ offerId: `O-JUMP-${TS}` });
 
     // Direct jump ACCEPTED -> COMPLETED is forbidden
     await assert.rejects(
@@ -198,17 +255,18 @@ describe('B3 Deal Service Unit Tests', () => {
   });
 
   test('8. Allows safe cancellation and rejects modifying cancelled deals', async () => {
+    const { farmerId, buyerId } = await makeParties('T8');
     __setTestOffer({
-      offerId: 'O-CANCEL',
-      farmerId: 'F-101',
-      buyerId: 'B-201',
+      offerId: `O-CANCEL-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Cotton',
       quantity: 50,
       offeredPrice: 65,
       status: 'ACCEPTED',
     });
 
-    const deal = await dealService.createDeal({ offerId: 'O-CANCEL' });
+    const deal = await dealService.createDeal({ offerId: `O-CANCEL-${TS}` });
     const cancelled = await dealService.cancelDeal(deal.id, 'Logistics unavailable');
 
     assert.equal(cancelled.status, 'CANCELLED');
@@ -228,20 +286,21 @@ describe('B3 Deal Service Unit Tests', () => {
   });
 
   test('9. Triggers event notifications for both farmer and buyer upon deal creation', async () => {
+    const { farmerId, buyerId } = await makeParties('T9');
     __setTestOffer({
-      offerId: 'O-NOTIF',
-      farmerId: 'F-NOTIF',
-      buyerId: 'B-NOTIF',
+      offerId: `O-NOTIF-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Mustard',
       quantity: 80,
       offeredPrice: 52,
       status: 'ACCEPTED',
     });
 
-    const deal = await dealService.createDeal({ offerId: 'O-NOTIF' });
+    const deal = await dealService.createDeal({ offerId: `O-NOTIF-${TS}` });
 
-    const farmerNotifs = await getUserNotifications('F-NOTIF');
-    const buyerNotifs = await getUserNotifications('B-NOTIF');
+    const farmerNotifs = await getUserNotifications(farmerId);
+    const buyerNotifs = await getUserNotifications(buyerId);
 
     assert.equal(farmerNotifs.data.length, 1);
     assert.equal(buyerNotifs.data.length, 1);
@@ -251,34 +310,35 @@ describe('B3 Deal Service Unit Tests', () => {
   });
 
   test('10. Calculates aggregated transaction summary stats', async () => {
+    const { farmerId, buyerId } = await makeParties('T10');
     __setTestOffer({
-      offerId: 'O-S1',
-      farmerId: 'F-SUM',
-      buyerId: 'B-SUM',
+      offerId: `O-S1-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Rice',
       quantity: 100,
       offeredPrice: 30,
       status: 'ACCEPTED',
     });
     __setTestOffer({
-      offerId: 'O-S2',
-      farmerId: 'F-SUM',
-      buyerId: 'B-SUM',
+      offerId: `O-S2-${TS}`,
+      farmerId,
+      buyerId,
       cropName: 'Wheat',
       quantity: 200,
       offeredPrice: 25,
       status: 'ACCEPTED',
     });
 
-    const d1 = await dealService.createDeal({ offerId: 'O-S1' });
-    const d2 = await dealService.createDeal({ offerId: 'O-S2' });
+    const d1 = await dealService.createDeal({ offerId: `O-S1-${TS}` });
+    const d2 = await dealService.createDeal({ offerId: `O-S2-${TS}` });
 
     // Complete d1
     await dealService.updateDealStatus(d1.id, 'CONFIRMED');
     await dealService.updateDealStatus(d1.id, 'IN_PROGRESS');
     await dealService.updateDealStatus(d1.id, 'COMPLETED');
 
-    const summary = await dealService.getDealsSummary({ farmerId: 'F-SUM' });
+    const summary = await dealService.getDealsSummary({ farmerId });
     assert.equal(summary.totalDeals, 2);
     assert.equal(summary.completedDeals, 1);
     assert.equal(summary.activeDeals, 1);

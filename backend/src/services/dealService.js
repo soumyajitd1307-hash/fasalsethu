@@ -1,6 +1,6 @@
 /**
  * Deal & Transaction Service (B3 Task)
- * 
+ *
  * Core business logic for agricultural deals / transactions:
  * 1. Consumes accepted offers via B2 OfferAdapter.
  * 2. Enforces duplicate deal protection (409 Conflict).
@@ -8,7 +8,8 @@
  * 4. Enforces the deal status lifecycle state machine:
  *    ACCEPTED -> CONFIRMED -> IN_PROGRESS -> COMPLETED (or CANCELLED).
  * 5. Emits tamper-evident in-app notifications on all deal lifecycle events.
- * 6. Dual storage: Prisma PostgreSQL (when DATABASE_URL is set) with memory fallback.
+ * 6. Single source of truth: Prisma PostgreSQL. Database errors are mapped to
+ *    clean application errors and never silently become in-memory writes.
  */
 
 const { getPrisma } = require('../config/database');
@@ -23,10 +24,6 @@ const ALLOWED_TRANSITIONS = {
   COMPLETED: [], // Terminal
   CANCELLED: [], // Terminal
 };
-
-// In-memory fallback storage
-const memoryDeals = [];
-let memDealCounter = 1;
 
 function notFound(id) {
   const err = new Error(`Deal not found: ${id}`);
@@ -46,9 +43,37 @@ function badRequest(msg) {
   return err;
 }
 
-function __clearTestDeals() {
-  memoryDeals.length = 0;
-  memDealCounter = 1;
+function dbNotConfigured() {
+  const err = new Error('Database not configured (DATABASE_URL is not set)');
+  err.status = 503;
+  return err;
+}
+
+// Map raw Prisma errors to clean API errors (never leak DB internals).
+function toApiError(err, id) {
+  if (err && err.code === 'P2002') {
+    const fields = Array.isArray(err.meta && err.meta.target)
+      ? err.meta.target.join(', ')
+      : 'unique field';
+    const dup = new Error(`Deal with this ${fields} already exists`);
+    dup.status = 409;
+    return dup;
+  }
+  if (err && err.code === 'P2025') {
+    return notFound(id);
+  }
+  if (err && err.code === 'P2003') {
+    const missing = new Error('Farmer or buyer referenced by the deal does not exist');
+    missing.status = 404;
+    return missing;
+  }
+  return err;
+}
+
+function clientOrThrow() {
+  const prisma = getPrisma();
+  if (!prisma) throw dbNotConfigured();
+  return prisma;
 }
 
 /**
@@ -98,24 +123,12 @@ async function createDeal(input, actorUser = null) {
   }
 
   const cleanOfferId = offerId.trim();
+  const prisma = clientOrThrow();
 
   // 1. Check duplicate deal protection
-  const prisma = getPrisma();
-  if (prisma) {
-    try {
-      const existing = await prisma.deal.findUnique({ where: { offerId: cleanOfferId } });
-      if (existing) {
-        throw conflict(`Deal already exists for offer: ${cleanOfferId} (Deal ID: ${existing.id})`);
-      }
-    } catch (err) {
-      if (err.status === 409) throw err;
-      // Fall through to memory check if DB query fails
-    }
-  }
-
-  const existingMemory = memoryDeals.find((d) => d.offerId === cleanOfferId);
-  if (existingMemory) {
-    throw conflict(`Deal already exists for offer: ${cleanOfferId} (Deal ID: ${existingMemory.id})`);
+  const existing = await prisma.deal.findUnique({ where: { offerId: cleanOfferId } });
+  if (existing) {
+    throw conflict(`Deal already exists for offer: ${cleanOfferId} (Deal ID: ${existing.id})`);
   }
 
   // 2. Fetch and validate accepted offer from B2 adapter
@@ -150,37 +163,21 @@ async function createDeal(input, actorUser = null) {
     updatedAt: new Date(),
   };
 
-  let createdDeal = null;
-
-  if (prisma) {
-    try {
-      createdDeal = await prisma.deal.create({
-        data: dealData,
-        include: {
-          farmer: { select: { id: true, name: true, phone: true, village: true, district: true } },
-          buyer: { select: { id: true, name: true, companyName: true, phone: true } },
-        },
-      });
-    } catch (err) {
-      if (err && err.code === 'P2002') {
-        throw conflict(`Deal already exists for offer: ${cleanOfferId}`);
-      }
-      // Fallback to memory
-    }
+  let createdDeal;
+  try {
+    createdDeal = await prisma.deal.create({
+      data: dealData,
+      include: {
+        farmer: { select: { id: true, name: true, phone: true, village: true, district: true } },
+        buyer: { select: { id: true, name: true, companyName: true, phone: true } },
+      },
+    });
+  } catch (err) {
+    throw toApiError(err, undefined);
   }
 
-  if (!createdDeal) {
-    createdDeal = {
-      id: `deal-${Date.now()}-${memDealCounter++}`,
-      ...dealData,
-      completedAt: null,
-      cancelledAt: null,
-      cancellationReason: null,
-    };
-    memoryDeals.unshift(createdDeal);
-  }
-
-  // 4. Emit notifications for Buyer and Farmer
+  // 4. Emit notifications for Buyer and Farmer (non-blocking: must not
+  // abort an already-persisted deal, but failures are real errors upstream).
   try {
     await Promise.all([
       createNotification({
@@ -216,25 +213,14 @@ async function createDeal(input, actorUser = null) {
 async function getDealById(id) {
   if (!id) throw notFound(id);
 
-  const prisma = getPrisma();
-  if (prisma) {
-    try {
-      const deal = await prisma.deal.findUnique({
-        where: { id },
-        include: {
-          farmer: { select: { id: true, name: true, phone: true, village: true, district: true, state: true } },
-          buyer: { select: { id: true, name: true, companyName: true, phone: true, district: true, state: true } },
-        },
-      });
-      if (!deal) throw notFound(id);
-      return deal;
-    } catch (err) {
-      if (err.status) throw err;
-      // Fallback
-    }
-  }
-
-  const deal = memoryDeals.find((d) => d.id === id);
+  const prisma = clientOrThrow();
+  const deal = await prisma.deal.findUnique({
+    where: { id },
+    include: {
+      farmer: { select: { id: true, name: true, phone: true, village: true, district: true, state: true } },
+      buyer: { select: { id: true, name: true, companyName: true, phone: true, district: true, state: true } },
+    },
+  });
   if (!deal) throw notFound(id);
   return deal;
 }
@@ -259,27 +245,19 @@ async function updateDealStatus(id, nextStatus, actorUser = null) {
     updateData.completedAt = now;
   }
 
-  const prisma = getPrisma();
-  let updatedDeal = null;
-
-  if (prisma) {
-    try {
-      updatedDeal = await prisma.deal.update({
-        where: { id },
-        data: updateData,
-        include: {
-          farmer: { select: { id: true, name: true, phone: true } },
-          buyer: { select: { id: true, name: true, companyName: true, phone: true } },
-        },
-      });
-    } catch {
-      // Fallback
-    }
-  }
-
-  if (!updatedDeal) {
-    Object.assign(deal, updateData);
-    updatedDeal = deal;
+  const prisma = clientOrThrow();
+  let updatedDeal;
+  try {
+    updatedDeal = await prisma.deal.update({
+      where: { id },
+      data: updateData,
+      include: {
+        farmer: { select: { id: true, name: true, phone: true } },
+        buyer: { select: { id: true, name: true, companyName: true, phone: true } },
+      },
+    });
+  } catch (err) {
+    throw toApiError(err, id);
   }
 
   // Emit event notifications
@@ -336,27 +314,19 @@ async function cancelDeal(id, reason = null, actorUser = null) {
     updatedAt: now,
   };
 
-  const prisma = getPrisma();
-  let cancelledDeal = null;
-
-  if (prisma) {
-    try {
-      cancelledDeal = await prisma.deal.update({
-        where: { id },
-        data: updateData,
-        include: {
-          farmer: { select: { id: true, name: true, phone: true } },
-          buyer: { select: { id: true, name: true, companyName: true, phone: true } },
-        },
-      });
-    } catch {
-      // Fallback
-    }
-  }
-
-  if (!cancelledDeal) {
-    Object.assign(deal, updateData);
-    cancelledDeal = deal;
+  const prisma = clientOrThrow();
+  let cancelledDeal;
+  try {
+    cancelledDeal = await prisma.deal.update({
+      where: { id },
+      data: updateData,
+      include: {
+        farmer: { select: { id: true, name: true, phone: true } },
+        buyer: { select: { id: true, name: true, companyName: true, phone: true } },
+      },
+    });
+  } catch (err) {
+    throw toApiError(err, id);
   }
 
   // Emit cancellation notifications
@@ -399,42 +369,24 @@ async function getFarmerDeals(farmerId, query = {}) {
   const status = query.status ? query.status.toUpperCase() : undefined;
   const skip = (page - 1) * limit;
 
-  const prisma = getPrisma();
-  if (prisma) {
-    try {
-      const where = { farmerId };
-      if (status) where.status = status;
+  const prisma = clientOrThrow();
+  const where = { farmerId };
+  if (status) where.status = status;
 
-      const [rows, total] = await prisma.$transaction([
-        prisma.deal.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            buyer: { select: { id: true, name: true, companyName: true, phone: true, village: true, district: true } },
-          },
-        }),
-        prisma.deal.count({ where }),
-      ]);
+  const [rows, total] = await prisma.$transaction([
+    prisma.deal.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        buyer: { select: { id: true, name: true, companyName: true, phone: true, village: true, district: true } },
+      },
+    }),
+    prisma.deal.count({ where }),
+  ]);
 
-      const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-      return {
-        data: rows,
-        pagination: { page, limit, total, totalPages },
-      };
-    } catch {
-      // Fallback
-    }
-  }
-
-  let filtered = memoryDeals.filter((d) => d.farmerId === farmerId);
-  if (status) filtered = filtered.filter((d) => d.status === status);
-
-  const total = filtered.length;
-  const rows = filtered.slice(skip, skip + limit);
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-
   return {
     data: rows,
     pagination: { page, limit, total, totalPages },
@@ -453,42 +405,24 @@ async function getBuyerDeals(buyerId, query = {}) {
   const status = query.status ? query.status.toUpperCase() : undefined;
   const skip = (page - 1) * limit;
 
-  const prisma = getPrisma();
-  if (prisma) {
-    try {
-      const where = { buyerId };
-      if (status) where.status = status;
+  const prisma = clientOrThrow();
+  const where = { buyerId };
+  if (status) where.status = status;
 
-      const [rows, total] = await prisma.$transaction([
-        prisma.deal.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            farmer: { select: { id: true, name: true, phone: true, village: true, district: true } },
-          },
-        }),
-        prisma.deal.count({ where }),
-      ]);
+  const [rows, total] = await prisma.$transaction([
+    prisma.deal.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        farmer: { select: { id: true, name: true, phone: true, village: true, district: true } },
+      },
+    }),
+    prisma.deal.count({ where }),
+  ]);
 
-      const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-      return {
-        data: rows,
-        pagination: { page, limit, total, totalPages },
-      };
-    } catch {
-      // Fallback
-    }
-  }
-
-  let filtered = memoryDeals.filter((d) => d.buyerId === buyerId);
-  if (status) filtered = filtered.filter((d) => d.status === status);
-
-  const total = filtered.length;
-  const rows = filtered.slice(skip, skip + limit);
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-
   return {
     data: rows,
     pagination: { page, limit, total, totalPages },
@@ -507,47 +441,27 @@ async function getAllDeals(query = {}) {
   const buyerId = query.buyerId;
   const skip = (page - 1) * limit;
 
-  const prisma = getPrisma();
-  if (prisma) {
-    try {
-      const where = {};
-      if (status) where.status = status;
-      if (farmerId) where.farmerId = farmerId;
-      if (buyerId) where.buyerId = buyerId;
+  const prisma = clientOrThrow();
+  const where = {};
+  if (status) where.status = status;
+  if (farmerId) where.farmerId = farmerId;
+  if (buyerId) where.buyerId = buyerId;
 
-      const [rows, total] = await prisma.$transaction([
-        prisma.deal.findMany({
-          where,
-          skip,
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            farmer: { select: { id: true, name: true, phone: true, district: true } },
-            buyer: { select: { id: true, name: true, companyName: true, phone: true } },
-          },
-        }),
-        prisma.deal.count({ where }),
-      ]);
+  const [rows, total] = await prisma.$transaction([
+    prisma.deal.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        farmer: { select: { id: true, name: true, phone: true, district: true } },
+        buyer: { select: { id: true, name: true, companyName: true, phone: true } },
+      },
+    }),
+    prisma.deal.count({ where }),
+  ]);
 
-      const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-      return {
-        data: rows,
-        pagination: { page, limit, total, totalPages },
-      };
-    } catch {
-      // Fallback
-    }
-  }
-
-  let filtered = [...memoryDeals];
-  if (status) filtered = filtered.filter((d) => d.status === status);
-  if (farmerId) filtered = filtered.filter((d) => d.farmerId === farmerId);
-  if (buyerId) filtered = filtered.filter((d) => d.buyerId === buyerId);
-
-  const total = filtered.length;
-  const rows = filtered.slice(skip, skip + limit);
   const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
-
   return {
     data: rows,
     pagination: { page, limit, total, totalPages },
@@ -597,5 +511,4 @@ module.exports = {
   getAllDeals,
   getDealsSummary,
   validateStatusTransition,
-  __clearTestDeals,
 };
