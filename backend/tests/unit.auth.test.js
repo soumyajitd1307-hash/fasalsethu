@@ -7,6 +7,11 @@ const assert = require('node:assert/strict');
 
 const { createHarness } = require('./helpers/jwt-test-server');
 
+// Load backend/.env (if present) so DB availability never depends on the order
+// in which this file requires modules. dotenv is idempotent and never overrides
+// real environment variables; loading it here deliberately does NOT instantiate
+// the cached config module, because the Auth0 test env is applied in `before`.
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const HAVE_DB = !!process.env.DATABASE_URL;
 const SKIP_DB = HAVE_DB ? false : 'BLOCKED: DATABASE_URL not set — needs local PostgreSQL';
 

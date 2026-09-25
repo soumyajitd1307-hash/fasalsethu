@@ -5,6 +5,10 @@ const notificationService = require('../src/services/notificationService');
 
 // Notifications persist in PostgreSQL only (no in-memory fallback), so these
 // tests need a migrated database and use unique user IDs per run.
+// Load backend/.env (if present) so DB availability never depends on the order
+// in which this file requires modules. dotenv is idempotent and never overrides
+// real environment variables.
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const HAVE_DB = !!process.env.DATABASE_URL;
 const SKIP_DB = HAVE_DB ? false : 'BLOCKED: DATABASE_URL not set — needs local PostgreSQL';
 const TS = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;

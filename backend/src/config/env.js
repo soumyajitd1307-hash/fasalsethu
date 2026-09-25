@@ -1,5 +1,11 @@
 // Central environment configuration. Never commit real secrets.
-require('dotenv').config();
+const path = require('path');
+
+// Load .env from the backend root (backend/.env) rather than the current
+// working directory, so the server, Prisma CLI and nodemon all read the same
+// file no matter where the process was started from. A missing .env is not an
+// error: real environment variables always win, and the app boots without a DB.
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 function parseOrigins(value, fallback) {
   const raw = value || fallback;

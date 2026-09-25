@@ -35,11 +35,61 @@ cd backend
 npm install
 ```
 
+## Local setup (clean checkout)
+
+Verified end to end on Windows/macOS/Linux with a local PostgreSQL. Run every command from the `backend/` directory.
+
+```bash
+# 1. dependencies (also generates the Prisma client via @prisma/client postinstall)
+npm install
+
+# 2. a database to work against (once per machine).
+#    Create it as UTF8: notification text contains ₹, and a database created
+#    from a non-UTF8 template silently rejects those rows.
+createdb -E UTF8 -T template0 fasalsethu
+# or: psql -U postgres -c "CREATE DATABASE fasalsethu ENCODING 'UTF8' TEMPLATE template0;"
+
+# 3. configuration
+cp .env.example .env           # then set DATABASE_URL (and PORT if 8000 is taken)
+
+# 4. schema: validate, generate the client, apply the committed migrations
+npm run db:validate
+npm run db:generate
+npm run db:deploy              # applies both existing migrations; safe to re-run
+
+# 5. start (development, hot reload)
+npm run dev                    # or: npm start  (plain node, no reload)
+
+# 6. verify
+curl http://localhost:8000/api/health
+```
+
+`GET /api/health` must report `"database": { "configured": true, "connected": true }`. If it reports `connected: false`, the `reason` field says why (wrong port, database not created, migrations not applied).
+
+Expected base URL: `http://localhost:8000` (override with `PORT`).
+
+Nothing above creates, drops or resets an existing database — `db:deploy` only applies pending migrations. `npm run db:migrate` (`prisma migrate dev`) is only needed when you intentionally change `schema.prisma`; it may prompt and requires permission to create a shadow database, so it is not part of first-time setup.
+
+### Environment variables
+
+`.env` is read from `backend/.env`. `.env` files are git-ignored; only `.env.example` is committed. Real environment variables always take precedence over the file.
+
+| Var | Required | Default | Purpose |
+|---|---|---|---|
+| `DATABASE_URL` | **Required for any database feature** (the server still boots without it) | — | PostgreSQL connection string used by Prisma, e.g. `postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public`. Without it every DB endpoint returns `503` and health reports `configured: false`. |
+| `PORT` | Optional | `8000` | TCP port the Express app listens on. |
+| `CORS_ORIGIN` | Optional | `http://localhost:5173` | Comma-separated list of allowed browser origins. Must include the Vite dev server origin for local frontend work; unknown origins get no CORS headers. |
+| `NODE_ENV` | Optional | `development` | `development` includes stack traces in API error responses; use `production` when deployed. |
+| `AUTH0_ISSUER_BASE_URL` | Optional — **required only to call authenticated B3 endpoints** | — | Auth0 tenant base URL (e.g. `https://TENANT.us.auth0.com/`). Its `/.well-known/jwks.json` provides the RS256 signing keys. Unset ⇒ `/api/deals/*` and `/api/notifications/*` fail closed with `503`. |
+| `AUTH0_AUDIENCE` | Optional — recommended alongside the issuer | — | Expected API audience claim. When set, tokens with a different `aud` are rejected with `401`. |
+
+There are no test-only environment variables. Tests read `DATABASE_URL` from the real environment and skip (report `BLOCKED`) when it is unset; test JWTs are minted in-process against a local JWKS server, so no Auth0 tenant or secret is needed to run the suite.
+
 ## Configure
 
 ```bash
 cp .env.example .env
-# edit .env: set PORT and DATABASE_URL
+# edit .env: set DATABASE_URL (and PORT only if you need a different port)
 ```
 
 | Var | Default | Purpose |
@@ -56,17 +106,17 @@ cp .env.example .env
 npm run db:validate
 # generate client
 npm run db:generate
-# create dev migration + apply to DB (needs live DATABASE_URL)
-npm run db:migrate
-# production apply
+# apply the committed migrations (idempotent; use this for setup and production)
 npm run db:deploy
+# create a NEW migration after editing schema.prisma (prompts; needs shadow-DB rights)
+npm run db:migrate
 # optional GUI
 npm run db:studio
 ```
 
-Tables: `farmers`, `buyers`, `crop_listings`, `buyer_requirements`, `market_prices`.
-Relations: `Farmer 1—N CropListing`, `Buyer 1—N BuyerRequirement` (FK cascade delete).
-Applied migration: `backend/prisma/migrations/20260925130308_init_marketplace_schema` (all five tables + indexes; verified against live PostgreSQL in Task 5).
+Tables: `farmers`, `buyers`, `crop_listings`, `buyer_requirements`, `market_prices`, `deals`, `notifications`. There is intentionally **no** `offers` table (see Deal API below).
+Relations: `Farmer 1—N CropListing`, `Buyer 1—N BuyerRequirement`, `Farmer/Buyer 1—N Deal`, `Deal 1—N Notification` (FK cascade delete).
+Committed migrations: `20260925130308_init_marketplace_schema` (farmers, buyers, crop_listings, buyer_requirements, market_prices) and `20260925204349_add_deal_notification_tables` (deals, notifications). Both verified against live PostgreSQL on a fresh database.
 
 ## Start
 
@@ -75,7 +125,37 @@ npm run dev   # nodemon, development
 npm start     # production
 ```
 
-Backend port: `http://localhost:8000` (or `$PORT`). The server binds the configured port on all interfaces, so platforms can route to it; `npm start` runs plain `node` (no nodemon) for production.
+Backend port: `http://localhost:8000` (or `$PORT`). The server binds the configured port on all interfaces, so platforms can route to it; `npm start` runs plain `node` (no nodemon) for production. `SIGINT`/`SIGTERM` trigger a graceful shutdown that closes the HTTP server and the Prisma connection.
+
+### Local API smoke test
+
+With the server running, this exercises every layer (no Auth0 tenant needed):
+
+```bash
+curl http://localhost:8000/api/health                                  # 200, database.connected = true
+curl http://localhost:8000/api/farmers                                 # 200 B1 read
+curl http://localhost:8000/api/crop-listings                          # 200 B1 read
+curl -X POST http://localhost:8000/api/farmers -H 'content-type: application/json' \
+  -d '{"name":"Local Dev","phone":"+919000000001","email":"local-dev@example.com"}'   # 201 B1 write
+curl "http://localhost:8000/api/matching/crop-listings/<listingId>"    # 200 B2 read
+curl "http://localhost:8000/api/price-discovery/<listingId>"           # 200 B2 read
+curl http://localhost:8000/api/deals                                  # 503 (Auth0 unset) or 401 (no token)
+curl -X POST http://localhost:8000/api/deals -H 'content-type: application/json' \
+  -d '{"offerId":"anything"}'                                          # 503 OFFER_PROVIDER_NOT_CONFIGURED once Auth0 is set
+```
+
+Expected behaviour worth knowing: the server always starts, even with no database — `/api/health` then reports `configured: false` and database endpoints return `503` instead of crashing. `/api/deals/*` and `/api/notifications/*` return `503` while `AUTH0_ISSUER_BASE_URL` is unset (fail closed), and `401` once it is set but no valid Bearer token is sent. `POST /api/deals` additionally returns `503` because no Offer provider is registered yet (see Deal API below).
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Health says `connected: false`, `Can't reach database server` | PostgreSQL is not running, or `DATABASE_URL` has the wrong host/port | Start PostgreSQL; re-check the URL |
+| Health says `configured: false` | `DATABASE_URL` is not set in the environment or `backend/.env` | Copy `.env.example` → `.env` and set it |
+| `P1012 … Environment variable not found: DATABASE_URL` from a Prisma command | Prisma CLI ran without the variable | Run it from `backend/`, or export `DATABASE_URL` first |
+| Health connects but every DB call returns an empty/erroring result | Migrations not applied | `npm run db:deploy` |
+| Deal/notification rows are missing, or a test fails with `0 !== 1` on notification counts | Database encoding is not UTF8, so `₹` text is rejected on insert | Recreate the database as UTF8 (step 2 above) |
+| `npm test` reports many suites `BLOCKED` | No `DATABASE_URL` in the environment or `backend/.env` | Set it, then re-run |
 
 ## Production deployment prerequisites (not yet deployed)
 

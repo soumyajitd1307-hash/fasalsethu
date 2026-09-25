@@ -18,6 +18,11 @@ const {
 // tests need a migrated database and use real persisted farmer/buyer IDs.
 // Requests carry real RS256 Bearer tokens minted against a local test JWKS;
 // plain x-user-id headers alone are (correctly) rejected with 401.
+// Load backend/.env (if present) so DB availability never depends on the order
+// in which this file requires modules. dotenv is idempotent and never overrides
+// real environment variables; loading it here deliberately does NOT instantiate
+// the cached config module, because the Auth0 test env is applied in `before`.
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const HAVE_DB = !!process.env.DATABASE_URL;
 const SKIP_DB = HAVE_DB ? false : 'BLOCKED: DATABASE_URL not set — needs local PostgreSQL';
 const TS = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
