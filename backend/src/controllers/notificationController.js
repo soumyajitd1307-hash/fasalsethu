@@ -9,7 +9,8 @@ const notificationService = require('../services/notificationService');
 
 async function list(req, res, next) {
   try {
-    const userId = (req.user && req.user.id) || req.query.userId || req.headers['x-user-id'];
+    // requireAuth guarantees req.user; never fall back to query/header identity.
+    const userId = req.user && req.user.id;
     if (!userId) {
       return res.status(401).json({
         status: 'error',
@@ -36,7 +37,8 @@ async function list(req, res, next) {
 
 async function getUnread(req, res, next) {
   try {
-    const userId = (req.user && req.user.id) || req.query.userId || req.headers['x-user-id'];
+    // requireAuth guarantees req.user; never fall back to query/header identity.
+    const userId = req.user && req.user.id;
     if (!userId) {
       return res.status(401).json({
         status: 'error',
@@ -63,7 +65,8 @@ async function getUnread(req, res, next) {
 
 async function markRead(req, res, next) {
   try {
-    const userId = (req.user && req.user.id) || req.headers['x-user-id'];
+    // requireAuth guarantees req.user; never fall back to client headers.
+    const userId = req.user && req.user.id;
     const notification = await notificationService.markAsRead(req.params.id, userId);
 
     return res.json({
@@ -77,7 +80,8 @@ async function markRead(req, res, next) {
 
 async function markAllRead(req, res, next) {
   try {
-    const userId = (req.user && req.user.id) || req.body.userId || req.headers['x-user-id'];
+    // requireAuth guarantees req.user; never fall back to client headers/body.
+    const userId = req.user && req.user.id;
     if (!userId) {
       return res.status(401).json({
         status: 'error',

@@ -1,12 +1,19 @@
 /**
- * Authentication & Authorization Middleware
- * 
- * Extracts authenticated user context and enforces role-based access control.
- * Supports:
- * - JWT / Bearer tokens (Authorization: Bearer <token>)
- * - Direct authenticated identity headers (x-user-id, x-user-role)
- * - Strict verification to prevent ID spoofing / unauthorized history access
+ * Authentication & Authorization Middleware.
+ *
+ * Single authentication model: Auth0-style RS256 JWTs verified against a
+ * JWKS endpoint. There is deliberately NO fallback to client-controlled
+ * identity headers — a request carrying only `x-user-id` is unauthenticated.
+ *
+ * - `requireAuth`: rejects missing/malformed/invalid tokens with 401.
+ *   When Auth0 is not configured (no issuer), it fails closed with 503.
+ *   Verified claims are exposed as `req.user = { id, role, email, name }`.
+ * - `authorizeDealAccess` / `authorizeDealParticipant`: ownership checks
+ *   (authorization, applied after authentication).
  */
+
+const jose = require('jose');
+const env = require('../config/env');
 
 class AuthError extends Error {
   constructor(message, status = 401) {
@@ -16,66 +23,83 @@ class AuthError extends Error {
   }
 }
 
+function authNotConfigured() {
+  return new AuthError('Authentication is not configured (AUTH0_ISSUER_BASE_URL is not set)', 503);
+}
+
+function withTrailingSlash(url) {
+  return url.endsWith('/') ? url : `${url}/`;
+}
+
+// JWKS client cache, keyed by issuer so tests can point at a local JWKS
+// server via environment without a process restart.
+let cachedIssuer = null;
+let cachedJwks = null;
+
+function jwksForIssuer(issuer) {
+  if (cachedJwks && cachedIssuer === issuer) return cachedJwks;
+  cachedIssuer = issuer;
+  cachedJwks = jose.createRemoteJWKSet(new URL('.well-known/jwks.json', withTrailingSlash(issuer)));
+  return cachedJwks;
+}
+
 /**
- * Extracts authenticated identity from headers.
- * Populates `req.user = { id, role, email, name }` or `null`.
+ * Extracts a Bearer token from the Authorization header. Returns null for
+ * missing, malformed, or non-Bearer credentials.
  */
-function authenticateUser(req, res, next) {
+function extractToken(authHeader) {
+  if (!authHeader || typeof authHeader !== 'string') return null;
+  const parts = authHeader.trim().split(/\s+/);
+  if (parts.length === 2 && parts[0].toLowerCase() === 'bearer' && parts[1]) {
+    return parts[1];
+  }
+  return null;
+}
+
+/**
+ * Cryptographically verifies an RS256 JWT (signature, issuer, audience,
+ * expiry/nbf) and returns its claims. Never decodes-without-verifying.
+ */
+async function verifyToken(token) {
+  if (!env.auth0Issuer) throw authNotConfigured();
+  const options = { issuer: withTrailingSlash(env.auth0Issuer), algorithms: ['RS256'] };
+  if (env.auth0Audience) {
+    options.audience = env.auth0Audience;
+  }
+  const { payload } = await jose.jwtVerify(token, jwksForIssuer(env.auth0Issuer), options);
+  return payload;
+}
+
+function unauthorized(message) {
+  return new AuthError(message || 'Unauthorized: missing or invalid credentials', 401);
+}
+
+/**
+ * Strict authentication gate for protected routes.
+ */
+async function requireAuth(req, res, next) {
   try {
-    const authHeader = req.headers.authorization || '';
-    const userIdHeader = req.headers['x-user-id'];
-    const userRoleHeader = req.headers['x-user-role'];
-
-    if (authHeader.startsWith('Bearer ')) {
-      const token = authHeader.slice(7).trim();
-      // Parse base64/JWT or token payload if provided
-      try {
-        const parts = token.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-          req.user = {
-            id: payload.sub || payload.uid || payload.id || userIdHeader,
-            role: (payload.role || userRoleHeader || 'user').toLowerCase(),
-            email: payload.email,
-            name: payload.name,
-          };
-          return next();
-        }
-      } catch {
-        // Fallback to token as user ID if simple test token
-      }
-
-      req.user = {
-        id: token || userIdHeader,
-        role: (userRoleHeader || 'user').toLowerCase(),
-      };
-      return next();
+    if (!env.auth0Issuer) throw authNotConfigured();
+    const token = extractToken(req.headers && req.headers.authorization);
+    if (!token) throw unauthorized('Unauthorized: missing or malformed Authorization Bearer token');
+    let payload;
+    try {
+      payload = await verifyToken(token);
+    } catch {
+      // Never leak token material or verifier internals to clients.
+      throw unauthorized('Unauthorized: invalid or expired token');
     }
-
-    if (userIdHeader) {
-      req.user = {
-        id: String(userIdHeader).trim(),
-        role: String(userRoleHeader || 'user').toLowerCase(),
-      };
-      return next();
-    }
-
-    req.user = null;
+    req.user = {
+      id: payload.sub,
+      role: (payload.role || 'user').toLowerCase(),
+      email: payload.email,
+      name: payload.name,
+    };
+    if (!req.user.id) throw unauthorized('Unauthorized: token carries no subject');
     return next();
   } catch (err) {
     return next(err);
   }
-}
-
-/**
- * Strict guard: requires an authenticated user identity.
- */
-function requireAuth(req, res, next) {
-  if (!req.user || !req.user.id) {
-    const err = new AuthError('Authentication required. Please provide a valid authorization token or user credentials.');
-    return next(err);
-  }
-  return next();
 }
 
 /**
@@ -125,8 +149,9 @@ function authorizeDealParticipant(deal, user) {
 
 module.exports = {
   AuthError,
-  authenticateUser,
   requireAuth,
   authorizeDealAccess,
   authorizeDealParticipant,
+  extractToken,
+  verifyToken,
 };

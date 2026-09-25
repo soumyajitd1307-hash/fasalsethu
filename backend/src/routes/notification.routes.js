@@ -5,11 +5,11 @@
 const express = require('express');
 const notificationController = require('../controllers/notificationController');
 const { notificationQuerySchema, validateQuery } = require('../utils/validate');
-const { authenticateUser } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(authenticateUser);
+router.use(requireAuth);
 
 // GET /api/notifications
 router.get('/', validateQuery(notificationQuerySchema), notificationController.list);

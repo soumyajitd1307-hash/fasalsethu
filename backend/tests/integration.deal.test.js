@@ -2,18 +2,23 @@ const { describe, test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 
-const app = require('../src/app');
-const farmerService = require('../src/services/farmerService');
-const buyerService = require('../src/services/buyerService');
+const { createHarness } = require('./helpers/jwt-test-server');
 const { __setTestOffer, __clearTestOffers } = require('../src/services/offerAdapter');
 
 // Deal persistence is PostgreSQL-only (no in-memory fallback), so these
 // tests need a migrated database and use real persisted farmer/buyer IDs.
+// Requests carry real RS256 Bearer tokens minted against a local test JWKS;
+// plain x-user-id headers alone are (correctly) rejected with 401.
 const HAVE_DB = !!process.env.DATABASE_URL;
 const SKIP_DB = HAVE_DB ? false : 'BLOCKED: DATABASE_URL not set — needs local PostgreSQL';
 const TS = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 
 const created = { farmers: [], buyers: [], userIds: [] };
+
+let app;
+let farmerService;
+let buyerService;
+let harness;
 
 async function makeParties(tag) {
   const phoneF = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
@@ -35,20 +40,31 @@ async function makeParties(tag) {
 }
 
 function authHeaders(userId, role) {
-  return { 'x-user-id': userId, 'x-user-role': role };
+  return harness
+    .mint({ sub: userId, role })
+    .then((token) => ({ Authorization: `Bearer ${token}` }));
+}
+
+// Any authenticated identity (no participant check on these routes).
+async function anyAuthHeaders() {
+  const token = await harness.mint({ sub: 'any-tester', role: 'farmer' });
+  return { Authorization: `Bearer ${token}` };
 }
 
 describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () => {
   let server;
   let baseUrl;
 
-  before((_, done) => {
+  before(async () => {
+    harness = await createHarness();
+    harness.applyEnv();
+    // Require AFTER auth env is set so config picks up the test issuer.
+    app = require('../src/app');
+    farmerService = require('../src/services/farmerService');
+    buyerService = require('../src/services/buyerService');
     server = http.createServer(app);
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      baseUrl = `http://127.0.0.1:${port}`;
-      done();
-    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    baseUrl = `http://127.0.0.1:${server.address().port}`;
   });
 
   after(async () => {
@@ -72,6 +88,7 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       if (server) server.close(resolve);
       else resolve();
     });
+    if (harness) await harness.close();
   });
 
   beforeEach(() => {
@@ -119,7 +136,7 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       offerId: `OFFER-001-${TS}`,
       pickupLocation: 'Lasalgaon Mandi Yard',
       deliveryLocation: 'Vashi Warehouse Hub',
-    });
+    }, await anyAuthHeaders());
 
     assert.equal(res.status, 201);
     assert.equal(res.json.success, true);
@@ -134,7 +151,7 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
   });
 
   test('2. POST /api/deals rejects if offer does not exist (404)', async () => {
-    const res = await api('POST', '/api/deals', { offerId: 'GHOST-OFFER' });
+    const res = await api('POST', '/api/deals', { offerId: 'GHOST-OFFER' }, await anyAuthHeaders());
     assert.equal(res.status, 404);
     assert.match(res.json.message, /Offer not found/);
   });
@@ -151,7 +168,7 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'REJECTED',
     });
 
-    const res = await api('POST', '/api/deals', { offerId: `OFFER-REJECTED-${TS}` });
+    const res = await api('POST', '/api/deals', { offerId: `OFFER-REJECTED-${TS}` }, await anyAuthHeaders());
     assert.equal(res.status, 400);
     assert.match(res.json.message, /must be 'ACCEPTED'/);
   });
@@ -168,10 +185,10 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    const first = await api('POST', '/api/deals', { offerId: `OFFER-DUP-${TS}` });
+    const first = await api('POST', '/api/deals', { offerId: `OFFER-DUP-${TS}` }, await anyAuthHeaders());
     assert.equal(first.status, 201);
 
-    const second = await api('POST', '/api/deals', { offerId: `OFFER-DUP-${TS}` });
+    const second = await api('POST', '/api/deals', { offerId: `OFFER-DUP-${TS}` }, await anyAuthHeaders());
     assert.equal(second.status, 409);
     assert.match(second.json.message, /Deal already exists/);
     assertNoLeak(second.json, 'duplicate deal');
@@ -189,10 +206,10 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: `OFFER-GET-${TS}` });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-GET-${TS}` }, await anyAuthHeaders());
     const dealId = created.json.data.id;
 
-    const res = await api('GET', `/api/deals/${dealId}`);
+    const res = await api('GET', `/api/deals/${dealId}`, null, await authHeaders(farmerId, 'farmer'));
     assert.equal(res.status, 200);
     assert.equal(res.json.data.id, dealId);
     assert.equal(res.json.data.cropName, 'Soybean');
@@ -210,21 +227,22 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: `OFFER-STATUS-${TS}` });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-STATUS-${TS}` }, await anyAuthHeaders());
     const dealId = created.json.data.id;
+    const party = await authHeaders(farmerId, 'farmer');
 
     // 1. CONFIRMED
-    const r1 = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'CONFIRMED' });
+    const r1 = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'CONFIRMED' }, party);
     assert.equal(r1.status, 200);
     assert.equal(r1.json.data.status, 'CONFIRMED');
 
     // 2. IN_PROGRESS
-    const r2 = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'IN_PROGRESS' });
+    const r2 = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'IN_PROGRESS' }, party);
     assert.equal(r2.status, 200);
     assert.equal(r2.json.data.status, 'IN_PROGRESS');
 
     // 3. COMPLETED
-    const r3 = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'COMPLETED' });
+    const r3 = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'COMPLETED' }, party);
     assert.equal(r3.status, 200);
     assert.equal(r3.json.data.status, 'COMPLETED');
     assert.ok(r3.json.data.completedAt);
@@ -242,11 +260,11 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: `OFFER-INVALID-${TS}` });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-INVALID-${TS}` }, await anyAuthHeaders());
     const dealId = created.json.data.id;
 
     // Direct jump ACCEPTED -> COMPLETED is forbidden
-    const bad = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'COMPLETED' });
+    const bad = await api('PATCH', `/api/deals/${dealId}/status`, { status: 'COMPLETED' }, await authHeaders(farmerId, 'farmer'));
     assert.equal(bad.status, 400);
     assert.match(bad.json.message, /Invalid status transition/);
   });
@@ -263,12 +281,12 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    const created = await api('POST', '/api/deals', { offerId: `OFFER-CANCEL-${TS}` });
+    const created = await api('POST', '/api/deals', { offerId: `OFFER-CANCEL-${TS}` }, await anyAuthHeaders());
     const dealId = created.json.data.id;
 
     const res = await api('PATCH', `/api/deals/${dealId}/cancel`, {
       reason: 'Adverse weather damaged farm produce',
-    });
+    }, await authHeaders(farmerId, 'farmer'));
     assert.equal(res.status, 200);
     assert.equal(res.json.data.status, 'CANCELLED');
     assert.equal(res.json.data.cancellationReason, 'Adverse weather damaged farm produce');
@@ -286,9 +304,9 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: `OFFER-FARMER-${TS}` });
+    await api('POST', '/api/deals', { offerId: `OFFER-FARMER-${TS}` }, await anyAuthHeaders());
 
-    const res = await api('GET', `/api/deals/farmer/${farmerId}`, null, authHeaders(farmerId, 'farmer'));
+    const res = await api('GET', `/api/deals/farmer/${farmerId}`, null, await authHeaders(farmerId, 'farmer'));
     assert.equal(res.status, 200);
     assert.equal(res.json.data.length, 1);
     assert.equal(res.json.data[0].farmerId, farmerId);
@@ -306,9 +324,9 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: `OFFER-BUYER-${TS}` });
+    await api('POST', '/api/deals', { offerId: `OFFER-BUYER-${TS}` }, await anyAuthHeaders());
 
-    const res = await api('GET', `/api/deals/buyer/${buyerId}`, null, authHeaders(buyerId, 'buyer'));
+    const res = await api('GET', `/api/deals/buyer/${buyerId}`, null, await authHeaders(buyerId, 'buyer'));
     assert.equal(res.status, 200);
     assert.equal(res.json.data.length, 1);
     assert.equal(res.json.data[0].buyerId, buyerId);
@@ -317,10 +335,8 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
   test('11. Unauthorized access to another user deals is rejected (403 Forbidden)', async () => {
     // Impostor farmer trying to spy on another farmer's deals
     const { farmerId } = await makeParties('A11');
-    const res = await api('GET', `/api/deals/farmer/${farmerId}`, null, {
-      'x-user-id': 'IMPOSTOR-FARMER',
-      'x-user-role': 'farmer',
-    });
+    const impostorAuth = await authHeaders('IMPOSTOR-FARMER', 'farmer');
+    const res = await api('GET', `/api/deals/farmer/${farmerId}`, null, impostorAuth);
     assert.equal(res.status, 403);
     assert.match(res.json.message, /Access denied/);
   });
@@ -337,14 +353,14 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: `OFFER-NOTIFS-${TS}` });
+    await api('POST', '/api/deals', { offerId: `OFFER-NOTIFS-${TS}` }, await anyAuthHeaders());
 
-    const farmerNotifs = await api('GET', '/api/notifications', null, authHeaders(farmerId, 'farmer'));
+    const farmerNotifs = await api('GET', '/api/notifications', null, await authHeaders(farmerId, 'farmer'));
     assert.equal(farmerNotifs.status, 200);
     assert.equal(farmerNotifs.json.data.length, 1);
     assert.equal(farmerNotifs.json.data[0].userId, farmerId);
 
-    const buyerNotifs = await api('GET', '/api/notifications', null, authHeaders(buyerId, 'buyer'));
+    const buyerNotifs = await api('GET', '/api/notifications', null, await authHeaders(buyerId, 'buyer'));
     assert.equal(buyerNotifs.status, 200);
     assert.equal(buyerNotifs.json.data.length, 1);
     assert.equal(buyerNotifs.json.data[0].userId, buyerId);
@@ -367,19 +383,20 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    await api('POST', '/api/deals', { offerId: `OFFER-READ-${TS}` });
+    await api('POST', '/api/deals', { offerId: `OFFER-READ-${TS}` }, await anyAuthHeaders());
 
-    const list = await api('GET', '/api/notifications', null, authHeaders(farmerId, 'farmer'));
+    const list = await api('GET', '/api/notifications', null, await authHeaders(farmerId, 'farmer'));
     const notifId = list.json.data[0].id;
     assert.equal(list.json.data[0].read, false);
 
-    const markRes = await api('PATCH', `/api/notifications/${notifId}/read`, null, authHeaders(farmerId, 'farmer'));
+    const markRes = await api('PATCH', `/api/notifications/${notifId}/read`, null, await authHeaders(farmerId, 'farmer'));
     assert.equal(markRes.status, 200);
     assert.equal(markRes.json.data.read, true);
   });
 
   test('15. GET /api/deals/summary returns aggregated analytics', async () => {
     const { farmerId, buyerId } = await makeParties('A15');
+    const party = await authHeaders(farmerId, 'farmer');
     __setTestOffer({
       offerId: `OFFER-SUM1-${TS}`,
       farmerId,
@@ -390,12 +407,12 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       status: 'ACCEPTED',
     });
 
-    const d = await api('POST', '/api/deals', { offerId: `OFFER-SUM1-${TS}` });
-    await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'CONFIRMED' });
-    await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'IN_PROGRESS' });
-    await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'COMPLETED' });
+    const d = await api('POST', '/api/deals', { offerId: `OFFER-SUM1-${TS}` }, party);
+    await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'CONFIRMED' }, party);
+    await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'IN_PROGRESS' }, party);
+    await api('PATCH', `/api/deals/${d.json.data.id}/status`, { status: 'COMPLETED' }, party);
 
-    const res = await api('GET', `/api/deals/summary?farmerId=${farmerId}`);
+    const res = await api('GET', `/api/deals/summary?farmerId=${farmerId}`, null, party);
     assert.equal(res.status, 200);
     assert.equal(res.json.data.totalDeals, 1);
     assert.equal(res.json.data.completedDeals, 1);

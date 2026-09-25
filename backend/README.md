@@ -80,9 +80,19 @@ Backend port: `http://localhost:8000` (or `$PORT`). The server binds the configu
 
 1. Provision managed PostgreSQL; set `DATABASE_URL` (format `postgresql://USER:PASSWORD@HOST:PORT/DATABASE`, `?schema=public` for Prisma).
 2. Set `NODE_ENV=production`, `PORT` (or accept the platform default), and `CORS_ORIGIN` to the deployed frontend origin(s).
-3. Install + generate + apply migrations once: `npm install`, `npm run db:generate`, `npm run db:deploy` (never `migrate reset` / drops; no seed step exists).
-4. Start with `npm start`; verify `GET /api/health` shows `database.connected: true`.
-5. No cloud provider, database, or public URL exists yet — nothing here claims otherwise.
+3. Set `AUTH0_ISSUER_BASE_URL` (e.g. `https://TENANT.us.auth0.com/`) and `AUTH0_AUDIENCE`; without them, deal/notification APIs fail closed with 503.
+4. Install + generate + apply migrations once: `npm install`, `npm run db:generate`, `npm run db:deploy` (never `migrate reset` / drops; no seed step exists).
+5. Start with `npm start`; verify `GET /api/health` shows `database.connected: true`.
+6. No cloud provider, database, or public URL exists yet — nothing here claims otherwise.
+
+## Authentication
+
+- Model: Auth0-style RS256 JWTs verified against a JWKS endpoint (`jose`). No Firebase, no second system.
+- `Authorization: Bearer <token>` is the only credential. Signature, issuer (`AUTH0_ISSUER_BASE_URL`), audience (`AUTH0_AUDIENCE`, when set), and expiry are enforced; failures → 401 with no token material leaked.
+- `x-user-id` (or any client header) is never identity — requests carrying only headers are rejected.
+- Protected (verified JWT required): all `/api/deals/*` and `/api/notifications/*`. Unconfigured Auth0 → 503.
+- Public by design: `/`, `/api/health`, all B1/B2 farmer, crop-listing, buyer, requirement, matching, price-discovery, and market-price reads.
+- Authorization is separate: history/participant checks compare the verified `sub`/`role` against the resource (`403` on mismatch).
 
 ## Health check
 

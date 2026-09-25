@@ -12,11 +12,11 @@ const {
   validateBody,
   validateQuery,
 } = require('../utils/validate');
-const { authenticateUser, authorizeDealAccess } = require('../middleware/auth');
+const { requireAuth, authorizeDealAccess } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(authenticateUser);
+router.use(requireAuth);
 
 // Summary endpoint
 // GET /api/deals/summary?farmerId=... or ?buyerId=...
