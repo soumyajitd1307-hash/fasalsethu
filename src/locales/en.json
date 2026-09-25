@@ -1,0 +1,116 @@
+{
+  "common": {
+    "appName": "FasalSethu",
+    "tagline": "Direct Farm-to-Market Exchange",
+    "language": "Language",
+    "loading": "Loading...",
+    "checkingAuth": "Checking authentication...",
+    "back": "Back",
+    "backToHome": "Back to Home",
+    "portalSelect": "Portal Selection",
+    "logout": "Logout",
+    "or": "OR",
+    "required": "Required",
+    "optional": "Optional",
+    "success": "Success",
+    "error": "Error"
+  },
+  "portals": {
+    "welcomeTitle": "Welcome to FasalSethu",
+    "welcomeSubtitle": "India's premier digital agricultural platform connecting farmers directly with institutional buyers, millers, and wholesale aggregators.",
+    "selectPortal": "Select your portal to continue",
+    "farmer": {
+      "title": "Farmer Portal",
+      "badge": "Producers & Cooperatives",
+      "description": "Sell crops directly, discover nearby verified buyers on radar, negotiate fair prices, and track farmgate pickup.",
+      "action": "Enter Farmer Portal",
+      "bullets": [
+        "Live local buyer radar & price quotes",
+        "Direct trade without middleman cuts",
+        "Free farmgate pickup options"
+      ]
+    },
+    "buyer": {
+      "title": "Buyer Portal",
+      "badge": "Processors, Traders & Exporters",
+      "description": "Post procurement requirements, source bulk agricultural commodities directly from verified farmers, and manage digital contracts.",
+      "action": "Enter Buyer Portal",
+      "bullets": [
+        "Post multi-crop bulk demands",
+        "Direct connection with verified harvest batches",
+        "Real-time logistics & quality tracking"
+      ]
+    }
+  },
+  "auth": {
+    "farmerLoginTitle": "Farmer Portal Login",
+    "farmerLoginSubtitle": "Access your farm inventory, price discovery radar, and active buyer proposals.",
+    "buyerLoginTitle": "Buyer Portal Login",
+    "buyerLoginSubtitle": "Manage your procurement pipelines, supplier agreements, and trade fulfillment.",
+    "farmerRegisterTitle": "Create Farmer Account",
+    "farmerRegisterSubtitle": "Join over 25,000+ verified farmers trading directly at peak market rates.",
+    "buyerRegisterTitle": "Create Buyer Account",
+    "buyerRegisterSubtitle": "Register your enterprise, mill, or trading firm to source agricultural produce.",
+    "emailOrPhone": "Email or Phone Number",
+    "emailOrPhonePlaceholder": "e.g., kisan@fasalsethu.in or 9876543210",
+    "email": "Email Address",
+    "emailPlaceholder": "name@example.com",
+    "phone": "Phone Number",
+    "phonePlaceholder": "10-digit mobile number",
+    "password": "Password",
+    "passwordPlaceholder": "Minimum 6 characters",
+    "confirmPassword": "Confirm Password",
+    "confirmPasswordPlaceholder": "Re-enter password",
+    "fullName": "Full Name",
+    "fullNamePlaceholder": "Enter your full name",
+    "businessName": "Business / Organization Name",
+    "businessNamePlaceholder": "e.g., Agro Mills Pvt Ltd or Wholesale Mandi Traders",
+    "preferredLanguage": "Preferred Interface Language",
+    "rememberMe": "Remember this device",
+    "forgotPassword": "Forgot password?",
+    "loginButton": "Login to Portal",
+    "registerButton": "Create Account",
+    "continueGoogle": "Continue with Google",
+    "demoLogin": "Try Demo Login",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "registerFarmer": "Create Farmer Account",
+    "registerBuyer": "Create Buyer Account",
+    "loginLink": "Sign In here",
+    "resetTitle": "Reset your password",
+    "resetSubtitle": "Enter your email address and we'll send you a password recovery link.",
+    "sendResetLink": "Send Reset Link",
+    "backToLogin": "Back to Login",
+    "roleMismatch": "Access restricted: Your account is registered as a {userRole}. Redirecting to your dedicated {targetPortal}..."
+  },
+  "errors": {
+    "wrongPassword": "Incorrect email or password.",
+    "invalidEmail": "Please enter a valid email address.",
+    "userNotFound": "No account found with these credentials.",
+    "network": "Unable to connect to server. Please check your internet connection and try again.",
+    "emailInUse": "This email is already registered. Please login instead.",
+    "weakPassword": "Password should be at least 6 characters long.",
+    "passwordMismatch": "Passwords do not match.",
+    "requiredFields": "Please fill in all required fields.",
+    "roleUnauthorized": "You do not have permission to access this portal with your current role.",
+    "generic": "An unexpected error occurred. Please try again."
+  },
+  "dashboard": {
+    "farmer": {
+      "welcome": "Welcome, Farmer",
+      "myCrops": "My Crop Batches",
+      "findBuyers": "Find Buyers",
+      "nearbyBuyers": "Nearby Buyers Radar",
+      "myOffers": "Sent Offers",
+      "marketPrices": "Live APMC Prices"
+    },
+    "buyer": {
+      "welcome": "Welcome, Buyer",
+      "requirements": "Active Procurement Demands",
+      "findFarmers": "Find Farmers",
+      "incomingOffers": "Incoming Farmer Offers",
+      "activeDeals": "Active Contracts",
+      "marketInfo": "Market Trends"
+    }
+  }
+}

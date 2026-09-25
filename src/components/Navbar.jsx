@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, ArrowRight } from 'lucide-react'
+import { Menu, X, ArrowRight, LogOut } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import LanguageSelector from './LanguageSelector'
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, role, profile, isAuthenticated, isFarmer, logout } = useAuth()
 
   useEffect(() => {
     setMobileOpen(false)
@@ -50,21 +54,46 @@ export default function Navbar() {
             <a href="/#how" className="hover:text-green-700 transition-colors">How It Works</a>
           </nav>
 
-          {/* Right Action: Direct Portals */}
+          {/* Right Action: Auth State & Portals */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              to="/seller"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-green-200 bg-green-50/80 text-green-800 hover:bg-green-100 text-xs font-bold transition-all"
-            >
-              <span>👨‍🌾 For Farmers</span>
-            </Link>
+            <LanguageSelector variant="light" />
 
-            <Link
-              to="/buyer"
-              className="px-4 py-1.5 rounded-full bg-green-700 hover:bg-green-800 text-white text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow"
-            >
-              🏢 Buyer Portal
-            </Link>
+            {isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <Link
+                  to={isFarmer ? '/farmer/dashboard' : '/buyer/dashboard'}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold hover:bg-emerald-100 transition-all shadow-xs"
+                >
+                  <span>{isFarmer ? '👨‍🌾' : '🏢'}</span>
+                  <span className="max-w-[110px] truncate">{profile?.name || user?.displayName || (isFarmer ? 'Farmer' : 'Buyer')}</span>
+                  <span className="text-[10px] px-1.5 py-0.2 bg-emerald-200 text-emerald-900 rounded-full uppercase tracking-wider font-extrabold">
+                    {role}
+                  </span>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await logout()
+                    navigate('/portal-select')
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 text-xs font-bold transition-all cursor-pointer"
+                  title="Logout"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/portal-select"
+                  className="px-3.5 py-1.5 rounded-full bg-green-700 hover:bg-green-800 text-white text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow flex items-center gap-1.5"
+                >
+                  <span>🔑 Portal Login</span>
+                </Link>
+              </div>
+            )}
 
             {/* Mobile Menu Toggle */}
             <button
@@ -107,12 +136,49 @@ export default function Navbar() {
               📊 Live APMC Mandi Rates
             </a>
             <div className="pt-2 flex flex-col gap-2">
-              <Link to="/seller" className="w-full text-center py-3 rounded-full bg-green-700 text-white font-bold text-sm shadow-sm">
-                Open Farmer Dashboard
-              </Link>
-              <Link to="/buyer" className="w-full text-center py-3 rounded-full border border-green-600 text-green-700 font-bold text-sm">
-                Open Buyer Dashboard
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <Link
+                    to={isFarmer ? '/farmer/dashboard' : '/buyer/dashboard'}
+                    className="w-full text-center py-3 rounded-full bg-green-700 text-white font-bold text-sm shadow-sm"
+                  >
+                    Open {isFarmer ? 'Farmer' : 'Buyer'} Dashboard
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await logout()
+                      navigate('/portal-select')
+                    }}
+                    className="w-full text-center py-2.5 rounded-full border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-sm"
+                  >
+                    Sign Out ({profile?.name || user?.displayName || role})
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/portal-select"
+                    className="w-full text-center py-3 rounded-full bg-green-700 text-white font-bold text-sm shadow-sm"
+                  >
+                    🔑 Select Portal & Login
+                  </Link>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      to="/farmer/login"
+                      className="text-center py-2 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold"
+                    >
+                      Farmer Sign In
+                    </Link>
+                    <Link
+                      to="/buyer/login"
+                      className="text-center py-2 rounded-xl bg-sky-50 text-sky-800 text-xs font-bold"
+                    >
+                      Buyer Sign In
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         )}
