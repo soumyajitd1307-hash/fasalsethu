@@ -205,7 +205,6 @@ const testimonials = [
 ]
 
 export default function Home() {
-  const [demoModalOpen, setDemoModalOpen] = useState(false)
 
   return (
     <ScrollCanvas frameCount={300}>
@@ -269,16 +268,6 @@ export default function Home() {
                 <span>Get Started</span>
                 <span className="group-hover:translate-x-1 transition-transform">→</span>
               </a>
-
-              <button
-                type="button"
-                onClick={() => setDemoModalOpen(true)}
-                className="px-6 py-3.5 rounded-full text-white font-semibold text-sm sm:text-base
-                           bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/30
-                           shadow-[0_4px_16px_rgba(0,0,0,0.2)] transition-all duration-200 cursor-pointer"
-              >
-                Watch Demo
-              </button>
             </motion.div>
           </div>
 
@@ -517,64 +506,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Watch Demo Modal ── */}
-        {demoModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full border-2 border-[#ea580c] flex items-center justify-center">
-                    <div className="w-2 h-2 rounded-full bg-[#ea580c]" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-bold text-gray-900 text-lg">Product Walkthrough</h3>
-                    <p className="text-gray-500 text-xs">AI-driven Agricultural Trading & Linkage Platform</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDemoModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-8 bg-gray-50 flex flex-col items-center text-center">
-                <div className="w-full aspect-video rounded-2xl bg-gradient-to-br from-green-900 to-emerald-950 p-8 flex flex-col items-center justify-center text-white relative overflow-hidden shadow-inner">
-                  <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-4 border border-white/30 animate-pulse">
-                    <span className="text-2xl">▶</span>
-                  </div>
-                  <h4 className="font-display font-bold text-xl mb-2">Instant Mandi Price Discovery & Direct Buyer Matching</h4>
-                  <p className="text-green-200 text-sm max-w-md">
-                    Watch how farmers compare real-time prices across 3,200+ mandis, calculate exact logistics deductions, and close verified deals in minutes.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mt-6">
-                  <Link
-                    to="/seller"
-                    onClick={() => setDemoModalOpen(false)}
-                    className="p-4 rounded-2xl bg-white border border-green-200 text-left hover:border-green-400 hover:shadow-md transition-all group"
-                  >
-                    <p className="font-bold text-gray-900 text-sm group-hover:text-green-700">🌾 Explore Farmer Experience →</p>
-                    <p className="text-gray-500 text-xs mt-1">Upload crop batches, view geo-matched buyers & mandi price matrix</p>
-                  </Link>
-                  <Link
-                    to="/buyer"
-                    onClick={() => setDemoModalOpen(false)}
-                    className="p-4 rounded-2xl bg-white border border-green-200 text-left hover:border-green-400 hover:shadow-md transition-all group"
-                  >
-                    <p className="font-bold text-gray-900 text-sm group-hover:text-green-700">🛒 Explore Buyer Experience →</p>
-                    <p className="text-gray-500 text-xs mt-1">Post procurement requirements & match directly with local farms</p>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
     </ScrollCanvas>
   )
