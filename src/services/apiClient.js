@@ -22,6 +22,8 @@ export class ApiError extends Error {
   }
 }
 
+let tokenGetter = null
+
 /**
  * Standard fetch wrapper
  */
@@ -39,6 +41,18 @@ async function request(endpoint, options = {}) {
     'Content-Type': 'application/json',
     Accept: 'application/json',
     ...(options.headers || {}),
+  }
+
+  // Attach Auth0 access token if a token getter is registered
+  if (tokenGetter && !headers['Authorization']) {
+    try {
+      const token = await tokenGetter()
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+    } catch {
+      // Ignore silent token retrieval errors for public routes
+    }
   }
 
   try {
@@ -113,5 +127,9 @@ export const apiClient = {
 
   delete(endpoint, options = {}) {
     return request(endpoint, { ...options, method: 'DELETE' })
+  },
+
+  setTokenGetter(fn) {
+    tokenGetter = fn
   },
 }

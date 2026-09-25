@@ -6,6 +6,10 @@ import Footer from './components/Footer'
 import Home from './pages/Home'
 import Seller from './pages/Seller'
 import Buyer from './pages/Buyer'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import ProtectedRoute from './components/auth/ProtectedRoute'
+import Auth0ProviderWithNavigate from './components/auth/Auth0ProviderWithNavigate'
 
 /* ── Scroll to top on route change ── */
 function ScrollToTop() {
@@ -23,7 +27,7 @@ function PageLoader() {
           <div className="absolute inset-0 rounded-full border-4 border-green-100 border-t-green-500 animate-spin" />
           <div className="absolute inset-3 rounded-full border-2 border-green-100 border-b-lime-400 animate-spin" style={{ animationDirection: 'reverse' }} />
         </div>
-        <p className="text-green-600 text-sm font-medium">Loading AgriBridge...</p>
+        <p className="text-green-600 text-sm font-medium">Loading FasalSetu...</p>
       </div>
     </div>
   )
@@ -45,6 +49,15 @@ function AnimatedRoutes() {
           <Route path="/" element={<Home />} />
           <Route path="/seller" element={<Seller />} />
           <Route path="/buyer" element={<Buyer />} />
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Home />} />
         </Routes>
       </motion.div>
@@ -55,14 +68,17 @@ function AnimatedRoutes() {
 export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <ScrollToTop />
-      <div className="relative min-h-screen bg-white">
-        <Navbar />
-        <Suspense fallback={<PageLoader />}>
-          <AnimatedRoutes />
-        </Suspense>
-        <Footer />
-      </div>
+      <Auth0ProviderWithNavigate>
+        <ScrollToTop />
+        <div className="relative min-h-screen bg-white">
+          <Navbar />
+          <Suspense fallback={<PageLoader />}>
+            <AnimatedRoutes />
+          </Suspense>
+          <Footer />
+        </div>
+      </Auth0ProviderWithNavigate>
     </BrowserRouter>
   )
 }
+
