@@ -1,0 +1,97 @@
+// FasalSethu backend — Prisma schema (foundation, Backend Member 1).
+// Tables: Farmer, Buyer, CropListing, BuyerRequirement.
+// Relations: Farmer 1—N CropListing, Buyer 1—N BuyerRequirement.
+// NOTE: matching / maps / auth are intentionally NOT modelled here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Farmer {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String
+  email      String?  @unique
+  village    String?
+  district   String?
+  state      String?
+  latitude   Float?
+  longitude  Float?
+  kycStatus  String   @default("PENDING")
+  trustScore Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  cropListings CropListing[]
+
+  @@index([phone])
+  @@index([district, state])
+  @@map("farmers")
+}
+
+model Buyer {
+  id          String   @id @default(cuid())
+  name        String
+  companyName String?
+  phone       String
+  email       String?  @unique
+  buyerType   String?
+  village     String?
+  district    String?
+  state       String?
+  latitude    Float?
+  longitude   Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirements BuyerRequirement[]
+
+  @@index([phone])
+  @@index([district, state])
+  @@map("buyers")
+}
+
+model CropListing {
+  id            String    @id @default(cuid())
+  farmerId      String
+  farmer        Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  cropName      String
+  quantity      Float
+  unit          String
+  expectedPrice Float
+  availableFrom DateTime?
+  status        String    @default("OPEN")
+  latitude      Float?
+  longitude     Float?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([farmerId])
+  @@index([cropName, status])
+  @@map("crop_listings")
+}
+
+model BuyerRequirement {
+  id               String    @id @default(cuid())
+  buyerId          String
+  buyer            Buyer     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  cropName         String
+  requiredQuantity Float
+  unit             String
+  targetPrice      Float
+  neededBy         DateTime?
+  latitude         Float?
+  longitude        Float?
+  status           String    @default("OPEN")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([buyerId])
+  @@index([cropName, status])
+  @@map("buyer_requirements")
+}
