@@ -6,6 +6,9 @@ import Footer from './components/Footer'
 import Home from './pages/Home'
 import Seller from './pages/Seller'
 import Buyer from './pages/Buyer'
+import LoginHub from './pages/LoginHub'
+import FarmerLogin from './pages/FarmerLogin'
+import BuyerLogin from './pages/BuyerLogin'
 
 /* ── Scroll to top on route change ── */
 function ScrollToTop() {
@@ -45,6 +48,9 @@ function AnimatedRoutes() {
           <Route path="/" element={<Home />} />
           <Route path="/seller" element={<Seller />} />
           <Route path="/buyer" element={<Buyer />} />
+          <Route path="/login" element={<LoginHub />} />
+          <Route path="/login/farmer" element={<FarmerLogin />} />
+          <Route path="/login/buyer" element={<BuyerLogin />} />
           <Route path="*" element={<Home />} />
         </Routes>
       </motion.div>

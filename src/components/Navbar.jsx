@@ -32,15 +32,14 @@ export default function Navbar() {
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-700">
             <Link to="/" className="hover:text-black transition-colors">Home</Link>
             <a href="#platform" className="hover:text-black transition-colors">Usecases</a>
-            <Link to="/buyer" className="hover:text-black transition-colors">Pricing</Link>
-            <Link to="/seller" className="hover:text-black transition-colors">Careers</Link>
-            <a href="#about" className="hover:text-black transition-colors">Contact</a>
+            <Link to="/seller" className="hover:text-black transition-colors">Farmer Portal</Link>
+            <Link to="/buyer" className="hover:text-black transition-colors">Buyer Portal</Link>
           </nav>
 
           {/* Right Action: Login Button */}
           <div className="flex items-center gap-3">
             <Link
-              to="/seller"
+              to="/login"
               className="px-5 py-1.5 rounded-full bg-[#131722] hover:bg-black text-white text-xs sm:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow"
             >
               Login
@@ -70,15 +69,11 @@ export default function Navbar() {
           >
             <Link to="/" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Home</Link>
             <a href="#platform" onClick={() => setMobileOpen(false)} className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Usecases</a>
-            <Link to="/buyer" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Pricing / Buyer Portal</Link>
-            <Link to="/seller" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Careers / Farmer Portal</Link>
-            <a href="#about" onClick={() => setMobileOpen(false)} className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Contact</a>
+            <Link to="/seller" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Farmer Portal</Link>
+            <Link to="/buyer" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Buyer Portal</Link>
             <div className="pt-2 flex flex-col gap-2">
-              <Link to="/seller" className="w-full text-center py-3 rounded-full bg-[#131722] text-white font-semibold text-sm">
-                Login / Farmer Portal
-              </Link>
-              <Link to="/buyer" className="w-full text-center py-3 rounded-full border border-gray-300 text-gray-800 font-semibold text-sm">
-                Buyer Portal
+              <Link to="/login" className="w-full text-center py-3 rounded-full bg-[#131722] text-white font-semibold text-sm">
+                Login
               </Link>
             </div>
           </motion.div>
