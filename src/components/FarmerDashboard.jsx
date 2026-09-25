@@ -25,6 +25,7 @@ export default function FarmerDashboard() {
   const [selectedBuyerId, setSelectedBuyerId] = useState(null)
   const [buyerLoading, setBuyerLoading] = useState(false)
   const [buyerError, setBuyerError] = useState(null)
+  const [selectedBatchForMatching, setSelectedBatchForMatching] = useState(null)
 
   // Modals state
   const [connectModalOpen, setConnectModalOpen] = useState(false)
@@ -60,13 +61,29 @@ export default function FarmerDashboard() {
       marketplaceService.getFarmerDashboard(),
       marketplaceService.getNearbyBuyers(buyerQuery),
     ])
-      .then(([dashRes, buyersRes]) => {
+      .then(async ([dashRes, buyersRes]) => {
         setData(dashRes)
-        setBuyers(buyersRes)
-        if (buyersRes && buyersRes.length > 0) {
+        
+        let processedBuyers = buyersRes || []
+        if (selectedBatchForMatching) {
+          processedBuyers = await marketplaceService.findMatchingBuyersForBatch(selectedBatchForMatching, processedBuyers)
+        } else {
+          processedBuyers = processedBuyers.map(b => {
+            const match = marketplaceService.calculateBuyerMatch(b, { crop: cropFilter !== 'ALL' ? cropFilter : 'Onion (Nashik Red)' })
+            return {
+              ...b,
+              matchScore: match.matchScore,
+              isHighMatch: match.isHighMatch,
+              matchingReasons: match.reasons,
+            }
+          })
+        }
+
+        setBuyers(processedBuyers)
+        if (processedBuyers && processedBuyers.length > 0) {
           setSelectedBuyerId(prev => {
-            const stillExists = buyersRes.some(b => b.id === prev)
-            return stillExists ? prev : buyersRes[0].id
+            const stillExists = processedBuyers.some(b => b.id === prev)
+            return stillExists ? prev : processedBuyers[0].id
           })
         } else {
           setSelectedBuyerId(null)
@@ -82,9 +99,27 @@ export default function FarmerDashboard() {
       })
   }
 
+  function handleFindMatchingBuyersForBatch(batch) {
+    setSelectedBatchForMatching(batch)
+    const baseCrop = batch.crop.includes('Onion')
+      ? 'Onion'
+      : batch.crop.includes('Wheat')
+      ? 'Wheat'
+      : batch.crop.includes('Tomato')
+      ? 'Tomato'
+      : 'ALL'
+    setCropFilter(baseCrop)
+    setActiveTab('DISCOVERY')
+  }
+
+  function handleClearBatchMatching() {
+    setSelectedBatchForMatching(null)
+    setCropFilter('ALL')
+  }
+
   useEffect(() => {
     loadDashboard()
-  }, [cropFilter, maxDistFilter, verifiedOnly, sortBy])
+  }, [cropFilter, maxDistFilter, verifiedOnly, sortBy, selectedBatchForMatching])
 
   // Handle Add Crop Listing
   async function handleAddCrop(e) {
@@ -325,9 +360,18 @@ export default function FarmerDashboard() {
                       onClick={() => setActiveTab('COMPARISON')}
                       className="text-xs text-green-700 font-bold hover:underline flex items-center gap-1"
                     >
-                      Compare Prices →
+                      Compare Mandis →
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleFindMatchingBuyersForBatch(l)}
+                    className="w-full mt-3 py-2.5 rounded-2xl bg-green-700 hover:bg-green-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs hover:shadow transition-all group"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-lime-300" />
+                    <span>Find Matching Buyers for this Batch</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -399,25 +443,57 @@ export default function FarmerDashboard() {
               </div>
             </div>
 
+            {/* Active Matching Batch Context Banner */}
+            {selectedBatchForMatching && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 rounded-2xl bg-gradient-to-r from-green-50 via-emerald-50 to-lime-50 border border-green-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-green-700 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0">
+                    🎯
+                  </div>
+                  <div>
+                    <p className="font-display font-bold text-gray-900 text-sm">
+                      Matching Verified Buyers for: <span className="text-green-800">{selectedBatchForMatching.crop}</span>
+                    </p>
+                    <p className="text-gray-600 mt-0.5">
+                      Batch Volume: <strong>{selectedBatchForMatching.quantity} {selectedBatchForMatching.unit}</strong> • Target Asking Price: <strong className="text-green-700">₹{selectedBatchForMatching.expectedPrice}/qtl</strong> • Location: {selectedBatchForMatching.location.split(',')[0]}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearBatchMatching}
+                  className="px-3.5 py-1.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-bold shrink-0 transition-all text-xs"
+                >
+                  ✕ Clear Match Focus
+                </button>
+              </motion.div>
+            )}
+
             {/* Hyperlocal Radar Map Interface */}
-            <NearbyMapInterface
-              buyers={buyers}
-              activeBuyerId={selectedBuyerId}
-              farmerLocation={`${farmer?.village || 'Dindori'}, ${farmer?.district || 'Nashik'}`}
-              onSelectBuyer={b => setSelectedBuyerId(b.id)}
-              onConnectBuyer={handleOpenConnectModal}
-              selectedRadius={maxDistFilter === 'ALL' ? 100 : Number(maxDistFilter)}
-              onRadiusChange={r => setMaxDistFilter(String(r))}
-              isLoading={buyerLoading}
-              errorMessage={buyerError}
-              onRetry={loadDashboard}
-            />
+            <div id="radar-map-section">
+              <NearbyMapInterface
+                buyers={buyers}
+                activeBuyerId={selectedBuyerId}
+                farmerLocation={`${farmer?.village || 'Dindori'}, ${farmer?.district || 'Nashik'}`}
+                onSelectBuyer={b => setSelectedBuyerId(b.id)}
+                onConnectBuyer={handleOpenConnectModal}
+                selectedRadius={maxDistFilter === 'ALL' ? 100 : Number(maxDistFilter)}
+                onRadiusChange={r => setMaxDistFilter(String(r))}
+                isLoading={buyerLoading}
+                errorMessage={buyerError}
+                onRetry={loadDashboard}
+              />
+            </div>
 
             {/* Buyer Directory Cards */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-display font-bold text-gray-900 text-lg">
-                  Verified Buyer Directory ({buyers.length} matching)
+                  Verified Buyer Matches ({buyers.length} matching)
                 </h4>
                 {selectedBuyerId && (
                   <span className="text-xs text-emerald-800 font-semibold flex items-center gap-1.5">
@@ -451,6 +527,11 @@ export default function FarmerDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {buyers.map(b => {
                     const isSelected = b.id === selectedBuyerId
+                    const targetCrop = selectedBatchForMatching?.crop || (cropFilter !== 'ALL' ? cropFilter : 'Onion (Nashik Red)')
+                    const priceMap = b.offeredPrices || b.offeredPricePerQtl || {}
+                    const quotedRate = priceMap[targetCrop] || Object.values(priceMap)[0]
+                    const existingDeal = requests?.find(r => r.buyerId === b.id && (r.status === 'PENDING' || r.status === 'NEGOTIATING' || r.status === 'ACCEPTED'))
+
                     return (
                       <div
                         key={b.id}
@@ -467,9 +548,11 @@ export default function FarmerDashboard() {
                               {b.type}
                             </span>
                             <div className="flex items-center gap-1.5">
-                              {isSelected && (
-                                <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-amber-400 text-gray-900 shadow-xs">
-                                  RADAR PIN
+                              {b.matchScore && (
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                                  b.matchScore >= 80 ? 'bg-emerald-100 text-emerald-800' : 'bg-lime-100 text-lime-800'
+                                } shadow-xs`}>
+                                  🎯 {b.matchScore}% MATCH
                                 </span>
                               )}
                               <span className="text-xs font-bold text-amber-500">
@@ -477,14 +560,36 @@ export default function FarmerDashboard() {
                               </span>
                             </div>
                           </div>
+
                           <h4 className="font-display font-bold text-gray-900 text-base leading-tight">
                             {b.name}
                           </h4>
                           <p className="text-gray-400 text-xs mt-0.5">
-                            {b.location} · <strong className="text-green-700">{b.distanceKm || b.distance} km</strong>
+                            {b.location} · <strong className="text-green-700">{b.distanceKm || b.distance} km away</strong>
                           </p>
 
-                          <div className="mt-3 p-3 rounded-2xl bg-gray-50 text-xs space-y-1">
+                          {/* Quoted Price Box */}
+                          {quotedRate && (
+                            <div className="my-2.5 p-2.5 rounded-2xl bg-green-50/80 border border-green-100 flex items-center justify-between text-xs">
+                              <span className="text-gray-600 font-medium">Offered for {targetCrop.split(' ')[0]}:</span>
+                              <span className="font-display font-black text-green-800 text-sm">
+                                ₹{quotedRate} <span className="text-[10px] text-gray-500 font-normal">/qtl</span>
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Matching Reasons Tags */}
+                          {b.matchingReasons && b.matchingReasons.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {b.matchingReasons.slice(0, 2).map((reason, idx) => (
+                                <span key={idx} className="text-[9px] px-2 py-0.5 rounded-md bg-green-50 text-green-800 font-semibold border border-green-100">
+                                  ✓ {reason}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="p-3 rounded-2xl bg-gray-50 text-xs space-y-1">
                             <p className="text-gray-500">
                               Capacity: <strong className="text-gray-800">{b.buyingCapacity || b.capacity}</strong>
                             </p>
@@ -495,6 +600,25 @@ export default function FarmerDashboard() {
                               Crops: <strong>{(b.interestedCrops || b.crops || []).join(', ')}</strong>
                             </p>
                           </div>
+
+                          {/* Active Proposal Indicator */}
+                          {existingDeal && (
+                            <div className="mt-2.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] flex items-center justify-between font-semibold text-amber-900">
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-600" /> Deal: {existingDeal.status}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setActiveTab('DEALS')
+                                }}
+                                className="underline text-amber-800 font-bold hover:text-black"
+                              >
+                                View Deal →
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         <div className="mt-4 flex gap-2">
@@ -503,15 +627,17 @@ export default function FarmerDashboard() {
                             onClick={e => {
                               e.stopPropagation()
                               setSelectedBuyerId(b.id)
+                              const mapEl = document.getElementById('radar-map-section')
+                              if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth' })
                             }}
                             className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all ${
                               isSelected
                                 ? 'bg-emerald-100 border-emerald-300 text-emerald-800'
                                 : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                             }`}
-                            title="Highlight marker on radar"
+                            title="Focus buyer on radar map"
                           >
-                            🎯 Radar
+                            📍 View on Map
                           </button>
                           <button
                             type="button"
@@ -638,7 +764,8 @@ export default function FarmerDashboard() {
         onClose={() => setConnectModalOpen(false)}
         buyer={selectedBuyerForConnect}
         farmerId={farmer?.id || 'frm-01'}
-        defaultCrop={selectedBuyerForConnect?.interestedCrops?.[0] || 'Onion (Nashik Red)'}
+        batchId={selectedBatchForMatching?.id || null}
+        defaultCrop={selectedBatchForMatching?.crop || selectedBuyerForConnect?.interestedCrops?.[0] || 'Onion (Nashik Red)'}
         onSuccess={() => {
           loadDashboard()
           setActiveTab('DEALS')
