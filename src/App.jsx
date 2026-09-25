@@ -1,0 +1,68 @@
+import React, { Suspense, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import Navbar from './components/Navbar'
+import Footer from './components/Footer'
+import Home from './pages/Home'
+import Seller from './pages/Seller'
+import Buyer from './pages/Buyer'
+
+/* ── Scroll to top on route change ── */
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [pathname])
+  return null
+}
+
+/* ── Page loading fallback ── */
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative w-14 h-14">
+          <div className="absolute inset-0 rounded-full border-4 border-green-100 border-t-green-500 animate-spin" />
+          <div className="absolute inset-3 rounded-full border-2 border-green-100 border-b-lime-400 animate-spin" style={{ animationDirection: 'reverse' }} />
+        </div>
+        <p className="text-green-600 text-sm font-medium">Loading AgriBridge...</p>
+      </div>
+    </div>
+  )
+}
+
+/* ── Animated routes ── */
+function AnimatedRoutes() {
+  const location = useLocation()
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<Home />} />
+          <Route path="/seller" element={<Seller />} />
+          <Route path="/buyer" element={<Buyer />} />
+          <Route path="*" element={<Home />} />
+        </Routes>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <ScrollToTop />
+      <div className="relative min-h-screen bg-white">
+        <Navbar />
+        <Suspense fallback={<PageLoader />}>
+          <AnimatedRoutes />
+        </Suspense>
+        <Footer />
+      </div>
+    </BrowserRouter>
+  )
+}
