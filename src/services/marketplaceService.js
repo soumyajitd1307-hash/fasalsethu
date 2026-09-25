@@ -16,13 +16,15 @@ import {
   MOCK_VERIFIED_BUYERS,
   MOCK_REGIONAL_MANDIS,
   MOCK_INITIAL_CONNECTIONS,
+  MOCK_BUYER_REQUIREMENTS,
   STORAGE_KEY_LISTINGS,
   STORAGE_KEY_REQUESTS,
+  STORAGE_KEY_BUYER_REQUIREMENTS,
   getStoredData,
   setStoredData,
 } from './mockMarketplaceData'
 import { buildPriceComparison } from '../utils/pricingEngine'
-import { validateDealRequest } from '../types/contracts'
+import { validateDealRequest, validateBuyerRequirement } from '../types/contracts'
 
 export const marketplaceService = {
   // =========================================================================
@@ -408,10 +410,17 @@ export const marketplaceService = {
    * Submits a counter-offer
    * Backend Endpoint: POST /api/connections/:connectionId/counter-offer
    * @param {string} connectionId
-   * @param {number} counterPrice
-   * @param {string} [message]
+   * @param {number|Object} counterPriceOrObj
+   * @param {string} [messageParam='']
    */
-  async submitCounterOffer(connectionId, counterPrice, message = '') {
+  async submitCounterOffer(connectionId, counterPriceOrObj, messageParam = '') {
+    const counterPrice = typeof counterPriceOrObj === 'object' && counterPriceOrObj !== null
+      ? counterPriceOrObj.counterPrice
+      : counterPriceOrObj
+    const message = typeof counterPriceOrObj === 'object' && counterPriceOrObj !== null
+      ? counterPriceOrObj.message || ''
+      : messageParam
+
     const payload = {
       counterPrice: Number(counterPrice),
       actorRole: 'FARMER',
@@ -546,5 +555,397 @@ export const marketplaceService = {
   async getTransactionAudit(connectionId) {
     const conn = await this.getConnectionDetails(connectionId)
     return conn.auditTrail || []
+  },
+
+  // =========================================================================
+  // 5. Buyer Portal & Sourcing Requirements
+  // =========================================================================
+
+  /**
+   * Fetches buyer profile & operational specs
+   * Backend Endpoint: GET /api/buyers/:buyerId/profile
+   * @param {string} [buyerId='byr-201']
+   */
+  async getBuyerProfile(buyerId = 'byr-201') {
+    try {
+      if (apiClient.isConfigured()) {
+        return await apiClient.get(`buyers/${buyerId}/profile`)
+      }
+    } catch (err) {
+      if (!apiClient.shouldFallback()) throw err
+      console.warn('[marketplaceService] Backend offline, fetching mock buyer profile:', err.message)
+    }
+
+    await new Promise(r => setTimeout(r, 40))
+    const buyer = MOCK_VERIFIED_BUYERS.find(b => b.id === buyerId) || MOCK_VERIFIED_BUYERS[0]
+    return {
+      ...buyer,
+      gstin: '27AABCK1234F1Z9',
+      warehouseLocation: buyer.location,
+      procurementBudget: '₹45,00,000 / month',
+      escrowBalance: 850000,
+    }
+  },
+
+  /**
+   * Updates buyer profile information
+   * Backend Endpoint: PATCH /api/buyers/:buyerId/profile
+   * @param {string} buyerId
+   * @param {Object} data
+   */
+  async updateBuyerProfile(buyerId, data) {
+    try {
+      if (apiClient.isConfigured()) {
+        return await apiClient.patch(`buyers/${buyerId}/profile`, data)
+      }
+    } catch (err) {
+      if (!apiClient.shouldFallback()) throw err
+      console.warn('[marketplaceService] Backend offline, updating mock buyer profile:', err.message)
+    }
+
+    await new Promise(r => setTimeout(r, 50))
+    const buyer = MOCK_VERIFIED_BUYERS.find(b => b.id === buyerId) || MOCK_VERIFIED_BUYERS[0]
+    return { ...buyer, ...data }
+  },
+
+  /**
+   * Fetches active buyer requirements (RFQs)
+   * Backend Endpoint: GET /api/buyers/requirements
+   * @param {string} [buyerId]
+   */
+  async getBuyerRequirements(buyerId = null) {
+    try {
+      if (apiClient.isConfigured()) {
+        return await apiClient.get('buyers/requirements', buyerId ? { buyerId } : {})
+      }
+    } catch (err) {
+      if (!apiClient.shouldFallback()) throw err
+      console.warn('[marketplaceService] Backend offline, fetching mock buyer requirements:', err.message)
+    }
+
+    await new Promise(r => setTimeout(r, 50))
+    const reqs = getStoredData(STORAGE_KEY_BUYER_REQUIREMENTS, MOCK_BUYER_REQUIREMENTS)
+    if (buyerId) {
+      return reqs.filter(r => r.buyerId === buyerId)
+    }
+    return reqs
+  },
+
+  /**
+   * Publishes a new buyer requirement
+   * Backend Endpoint: POST /api/buyers/requirements
+   * @param {Object} data
+   */
+  async addBuyerRequirement(data) {
+    const validation = validateBuyerRequirement(data)
+    if (!validation.isValid) {
+      throw new Error(`Validation Error: ${Object.values(validation.errors).join(', ')}`)
+    }
+
+    try {
+      if (apiClient.isConfigured()) {
+        return await apiClient.post('buyers/requirements', data)
+      }
+    } catch (err) {
+      if (!apiClient.shouldFallback()) throw err
+      console.warn('[marketplaceService] Backend offline, storing requirement locally:', err.message)
+    }
+
+    await new Promise(r => setTimeout(r, 60))
+    const reqs = getStoredData(STORAGE_KEY_BUYER_REQUIREMENTS, MOCK_BUYER_REQUIREMENTS)
+    const newReq = {
+      id: `req-b-${Date.now().toString().slice(-4)}`,
+      buyerId: data.buyerId || 'byr-201',
+      buyerName: data.buyerName || 'Kisan Agro Processing Ltd.',
+      contactPerson: data.contactPerson || 'Procurement Team',
+      phone: data.phone || '+91 98230 44120',
+      crop: data.crop,
+      variety: data.variety || 'Standard Market Grade',
+      category: data.category || 'Commodity',
+      requiredQty: Number(data.requiredQty),
+      unit: data.unit || 'Quintal',
+      offeredPrice: Number(data.offeredPrice),
+      maxPrice: Number(data.maxPrice || data.offeredPrice * 1.05),
+      targetDeliveryDate: data.targetDeliveryDate || new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
+      qualityGrade: data.qualityGrade || 'Grade A',
+      location: data.location || 'Nashik MIDC Logistics Park',
+      coordinates: data.coordinates || { latitude: 19.973, longitude: 73.742 },
+      distance: data.distance || 18,
+      freightTerms: data.freightTerms || 'FREE_FARMGATE_PICKUP',
+      status: 'OPEN',
+      verified: true,
+      verificationTier: 'KYC & GST VERIFIED',
+      trustScore: 98,
+      createdAt: new Date().toISOString(),
+    }
+
+    reqs.unshift(newReq)
+    setStoredData(STORAGE_KEY_BUYER_REQUIREMENTS, reqs)
+    return newReq
+  },
+
+  /**
+   * Deletes or closes a buyer requirement
+   * Backend Endpoint: DELETE /api/buyers/requirements/:id
+   * @param {string} requirementId
+   */
+  async deleteBuyerRequirement(requirementId) {
+    try {
+      if (apiClient.isConfigured()) {
+        return await apiClient.delete(`buyers/requirements/${requirementId}`)
+      }
+    } catch (err) {
+      if (!apiClient.shouldFallback()) throw err
+      console.warn('[marketplaceService] Backend offline, deleting requirement locally:', err.message)
+    }
+
+    await new Promise(r => setTimeout(r, 40))
+    let reqs = getStoredData(STORAGE_KEY_BUYER_REQUIREMENTS, MOCK_BUYER_REQUIREMENTS)
+    reqs = reqs.filter(r => r.id !== requirementId)
+    setStoredData(STORAGE_KEY_BUYER_REQUIREMENTS, reqs)
+    return { success: true, id: requirementId }
+  },
+
+  /**
+   * Retrieves incoming farmer proposals for a specific buyer
+   * Backend Endpoint: GET /api/buyers/:buyerId/offers
+   * @param {string} [buyerId='byr-201']
+   */
+  async getIncomingFarmerOffers(buyerId = 'byr-201') {
+    try {
+      if (apiClient.isConfigured()) {
+        return await apiClient.get(`buyers/${buyerId}/offers`)
+      }
+    } catch (err) {
+      if (!apiClient.shouldFallback()) throw err
+      console.warn('[marketplaceService] Backend offline, filtering stored connection requests:', err.message)
+    }
+
+    await new Promise(r => setTimeout(r, 50))
+    const requests = getStoredData(STORAGE_KEY_REQUESTS, MOCK_INITIAL_CONNECTIONS)
+    return requests.filter(r => r.buyerId === buyerId)
+  },
+
+  /**
+   * Buyer accepts, counters, or declines a farmer's deal offer
+   * Backend Endpoint: POST /api/buyers/offers/:connectionId/respond
+   * @param {string} connectionId
+   * @param {'ACCEPT' | 'REJECT' | 'NEGOTIATE'} action
+   * @param {Object} [payload]
+   */
+  async buyerRespondOffer(connectionId, action, payload = {}) {
+    await new Promise(r => setTimeout(r, 60))
+    const requests = getStoredData(STORAGE_KEY_REQUESTS, MOCK_INITIAL_CONNECTIONS)
+    const idx = requests.findIndex(r => r.id === connectionId)
+    if (idx === -1) throw new Error(`Offer not found: ${connectionId}`)
+
+    const req = requests[idx]
+    const timestamp = new Date().toISOString()
+    const oldStatus = req.status
+
+    if (action === 'ACCEPT') {
+      req.status = 'ACCEPTED'
+      req.auditTrail.push({
+        timestamp,
+        actor: 'BUYER',
+        action: 'Deal Accepted by Buyer & Escrow Locked',
+        oldStatus,
+        newStatus: 'ACCEPTED',
+        price: req.farmerAskPrice || req.quotedPrice,
+        quantity: req.quantity,
+        message: payload.message || 'Buyer confirmed direct farm procurement order.',
+      })
+    } else if (action === 'REJECT') {
+      req.status = 'REJECTED'
+      req.auditTrail.push({
+        timestamp,
+        actor: 'BUYER',
+        action: 'Offer Declined by Buyer',
+        oldStatus,
+        newStatus: 'REJECTED',
+        message: payload.message || 'Requirement fulfilled or price outside target range.',
+      })
+    } else if (action === 'NEGOTIATE') {
+      req.status = 'NEGOTIATING'
+      if (payload.counterPrice) {
+        req.quotedPrice = Number(payload.counterPrice)
+      }
+      req.auditTrail.push({
+        timestamp,
+        actor: 'BUYER',
+        action: 'Buyer Counter-Offer Proposed',
+        oldStatus,
+        newStatus: 'NEGOTIATING',
+        price: Number(payload.counterPrice),
+        quantity: req.quantity,
+        message: payload.message || `Buyer countered at ₹${payload.counterPrice}/qtl.`,
+      })
+    }
+
+    requests[idx] = req
+    setStoredData(STORAGE_KEY_REQUESTS, requests)
+    return req
+  },
+
+  // =========================================================================
+  // 6. Intelligent Matching Engine (B2 Scope)
+  // =========================================================================
+
+  /**
+   * Scores a buyer against a farmer batch criteria
+   * @param {Object} buyer
+   * @param {Object} batch
+   */
+  calculateBuyerMatch(buyer, batch = {}) {
+    const cropTarget = batch.crop || ''
+    const buyerCrops = buyer.crops || buyer.interestedCrops || []
+    const isExactCrop = buyerCrops.some(c =>
+      c.toLowerCase().includes(cropTarget.toLowerCase()) || cropTarget.toLowerCase().includes(c.toLowerCase())
+    )
+
+    let score = 0
+    const reasons = []
+
+    // 1. Crop Match (up to 40 pts)
+    if (isExactCrop) {
+      score += 40
+      reasons.push(`Direct requirement for ${cropTarget}`)
+    } else {
+      score += 10
+    }
+
+    // 2. Price Compatibility (up to 25 pts)
+    const priceMap = buyer.offeredPrices || buyer.offeredPricePerQtl || {}
+    const buyerPrice = priceMap[cropTarget] || Object.values(priceMap)[0] || 0
+    const farmerPrice = Number(batch.expectedPrice || batch.basePrice || 0)
+
+    if (buyerPrice > 0 && farmerPrice > 0) {
+      const priceDiffRatio = (buyerPrice - farmerPrice) / farmerPrice
+      if (priceDiffRatio >= 0) {
+        score += 25
+        reasons.push(`Matches or exceeds target price (+₹${buyerPrice - farmerPrice}/qtl)`)
+      } else if (priceDiffRatio >= -0.08) {
+        score += 18
+        reasons.push(`Close to target price (within 8%)`)
+      } else {
+        score += 10
+      }
+    } else {
+      score += 15
+    }
+
+    // 3. Proximity & Logistics (up to 20 pts)
+    const dist = buyer.distance !== undefined ? buyer.distance : buyer.distanceKm || 50
+    if (dist <= 15) {
+      score += 20
+      reasons.push(`Ultra-hyperlocal: only ${dist} km away`)
+    } else if (dist <= 35) {
+      score += 16
+      reasons.push(`Nearby farm cluster: ${dist} km away`)
+    } else if (dist <= 75) {
+      score += 12
+      reasons.push(`Regional logistics: ${dist} km away`)
+    } else {
+      score += 6
+    }
+
+    const providesFreePickup = buyer.freightStatus !== undefined ? buyer.freightStatus : buyer.transportProvided
+    if (providesFreePickup) {
+      score = Math.min(100, score + 5)
+      reasons.push('Free farmgate truck dispatch')
+    }
+
+    // 4. KYC & Trust (up to 15 pts)
+    if (buyer.kycVerified) {
+      score += 8
+    }
+    if (buyer.trustScore >= 95) {
+      score += 7
+      reasons.push(`Top-tier trust rating (${buyer.trustScore}%)`)
+    } else if (buyer.trustScore >= 90) {
+      score += 5
+    }
+
+    const normalizedScore = Math.min(99, Math.max(45, score))
+
+    return {
+      matchScore: normalizedScore,
+      isHighMatch: normalizedScore >= 80,
+      reasons,
+      offeredPrice: buyerPrice,
+      distanceKm: dist,
+    }
+  },
+
+  /**
+   * Matches buyers for a given crop batch listing with intelligent scoring
+   * @param {Object} batch
+   * @param {Array} [buyersList]
+   */
+  async findMatchingBuyersForBatch(batch, buyersList = null) {
+    const buyers = buyersList || (await this.getNearbyBuyers({ crop: batch.crop || 'ALL' }))
+    const scored = buyers.map(buyer => {
+      const match = this.calculateBuyerMatch(buyer, batch)
+      return {
+        ...buyer,
+        matchScore: match.matchScore,
+        isHighMatch: match.isHighMatch,
+        matchingReasons: match.reasons,
+      }
+    })
+
+    // Sort descending by match score
+    return scored.sort((a, b) => b.matchScore - a.matchScore)
+  },
+
+  /**
+   * Matches farmer listings for a buyer requirement
+   * @param {Object} requirement
+   * @param {Array} [listingsList]
+   */
+  async findMatchingFarmersForRequirement(requirement, listingsList = null) {
+    const listings = listingsList || (await this.getFarmerInventory())
+    const reqCrop = requirement.crop || ''
+
+    return listings
+      .filter(l => l.status === 'ACTIVE' || l.status === 'IN_NEGOTIATION')
+      .map(listing => {
+        let score = 50
+        const reasons = []
+
+        const isExact = listing.crop.toLowerCase().includes(reqCrop.toLowerCase()) ||
+          reqCrop.toLowerCase().includes(listing.crop.toLowerCase())
+
+        if (isExact) {
+          score += 30
+          reasons.push(`Exact crop & variety available: ${listing.crop}`)
+        }
+
+        if (listing.quantity >= requirement.requiredQty) {
+          score += 15
+          reasons.push(`Full volume available (${listing.quantity} ${listing.unit})`)
+        } else if (listing.quantity >= requirement.requiredQty * 0.4) {
+          score += 10
+          reasons.push(`Partial batch available (${listing.quantity} ${listing.unit})`)
+        }
+
+        if (requirement.offeredPrice >= listing.expectedPrice) {
+          score += 15
+          reasons.push(`Offered price meets farmer target (₹${requirement.offeredPrice}/qtl)`)
+        }
+
+        if (listing.verified) {
+          score += 5
+          reasons.push('Field-verified quality & moisture')
+        }
+
+        const matchScore = Math.min(99, score)
+        return {
+          ...listing,
+          matchScore,
+          matchingReasons: reasons,
+        }
+      })
+      .sort((a, b) => b.matchScore - a.matchScore)
   },
 }

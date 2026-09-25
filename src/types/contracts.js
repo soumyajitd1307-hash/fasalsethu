@@ -162,6 +162,37 @@
  * @property {'DISTANCE' | 'TRUST' | 'PRICE'} [sortBy] - Sorting parameter
  */
 
+/**
+ * @typedef {Object} BuyerRequirement
+ * @property {string} id - Unique requirement identifier (e.g. 'req-b-01')
+ * @property {string} buyerId - Owner buyer ID
+ * @property {string} buyerName - Name of purchasing entity
+ * @property {string} crop - Target crop commodity
+ * @property {string} [variety] - Required cultivar / specification
+ * @property {string} category - Crop category
+ * @property {number} requiredQty - Quantity required in quintals/tonnes
+ * @property {string} unit - Measurement unit
+ * @property {number} offeredPrice - Baseline purchase rate (₹/unit)
+ * @property {number} [maxPrice] - Ceiling budget rate (₹/unit)
+ * @property {string} targetDeliveryDate - Target fulfillment date
+ * @property {string} qualityGrade - Grade requirement (e.g. Grade A Export)
+ * @property {string} location - Delivery hub or warehouse location
+ * @property {Location} [coordinates] - Delivery center coordinates
+ * @property {'FREE_FARMGATE_PICKUP' | 'FARMER_DELIVERY'} freightTerms - Logistics requirement
+ * @property {'OPEN' | 'PARTIALLY_MATCHED' | 'FULFILLED' | 'CLOSED'} status - Requirement status
+ * @property {string} createdAt - Date created
+ */
+
+/**
+ * @typedef {Object} MatchAnalysis
+ * @property {number} matchScore - Overall match score (0-100)
+ * @property {number} priceScore - Price alignment score
+ * @property {number} distanceScore - Proximity score
+ * @property {number} capacityScore - Quantity match score
+ * @property {number} trustScore - Verification/trust score
+ * @property {string[]} matchingReasons - Key match indicators
+ */
+
 // Model validation helpers
 export function validateDealRequest(req) {
   const errors = {}
@@ -176,3 +207,17 @@ export function validateDealRequest(req) {
     errors,
   }
 }
+
+export function validateBuyerRequirement(req) {
+  const errors = {}
+  if (!req.buyerId) errors.buyerId = 'Buyer ID is required'
+  if (!req.crop) errors.crop = 'Crop is required'
+  if (!req.requiredQty || Number(req.requiredQty) <= 0) errors.requiredQty = 'Quantity must be greater than zero'
+  if (!req.offeredPrice || Number(req.offeredPrice) <= 0) errors.offeredPrice = 'Offered price must be greater than zero'
+  if (!req.location) errors.location = 'Procurement location is required'
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  }
+}
+
