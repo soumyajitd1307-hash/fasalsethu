@@ -141,6 +141,55 @@ curl -X POST http://localhost:8000/api/crop-listings \
   -d '{"farmerId":"<farmer-id>","cropName":"Onion","quantity":1000,"unit":"kg","minExpectedPrice":24,"maxExpectedPrice":28}'
 ```
 
+## Market Prices — government mandi context (B1 Task 4)
+
+Mandi prices are MARKET CONTEXT, not the farmer's selling range. A mandi may quote min ₹21 / modal ₹25 / max ₹29 per quintal while a farmer independently lists min ₹24 / max ₹28. Nothing forces the farmer range inside the mandi range; `crop_listings.minExpectedPrice/maxExpectedPrice` semantics are unchanged.
+
+### Source inspected
+
+No government dataset file ships with this repository (searched for CSV/XLSX/JSON data; only references exist: `docs/API_CONTRACT_M5.md` "Automated Mandi Scraper Sync … TODO: [Backend Team]" and frontend mock mandis, which are computed quotes, not raw records). The normalized model follows the actual Agmarknet daily-price record layout from data.gov.in ("Current Daily Price of Various Commodities from Various Markets (Mandi)": `State, District, Market, Commodity, Variety, Grade, Arrival_Date, Min_Price, Max_Price, Modal_Price`, Rs/quintal). Ingestion below was tested with representative Agmarknet-shaped rows — clearly synthetic, not real government data.
+
+### Normalized model (`market_prices`)
+
+`id, commodity, variety?, grade?, market, district?, state, minPrice, maxPrice, modalPrice?, unit (default "quintal"), observedAt (arrival date, UTC midnight), source (default "agmarknet"), sourceRecordId?, createdAt, updatedAt`. Indexes: `(commodity, observedAt)`, `(state, district, observedAt)`, `(market, observedAt)`. No DB unique constraint (the source itself repeats keys via corrections) — dedup lives in the importer.
+
+### Ingestion flow
+
+`parseCsvText` (dependency-free CSV incl. quotes/commas) → `importRecords(rows, { source, chunkSize=500 })`: validate → normalize → in-batch dedup → one batched `findMany OR` lookup per chunk → create / update-on-price-change / duplicate-skip. Returns `{ total, valid, invalid, inserted, updated, duplicates, errors[] }` (up to 25 samples of `{ index, errors }`); nothing is silently discarded.
+
+Normalization rules: trim/collapse whitespace; prices strip `₹`, commas, `Rs`; dates accept `DD/MM/YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`, ISO; unit maps quintal/qtl, kg, tonne variants (default quintal); reject missing commodity/market/state, non-numeric/negative prices, `min > max`, bad dates; tolerate modal outside `[min, max]` (real source anomaly). Dedup key: commodity|variety|grade|market|district|state|day|unit (lowercased).
+
+Run it:
+
+```bash
+DATABASE_URL="postgresql://..." npm run mandi:import -- ./mandi.csv agmarknet
+# or from code:
+const { parseCsvText, importRecords } = require('./src/services/marketPriceIngestService');
+```
+
+Requires live `DATABASE_URL` (otherwise `503`, never faked).
+
+### API (read-only)
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| `GET` | `/api/market-prices?commodity=&variety=&state=&district=&market=&date=&dateFrom=&dateTo=&page=&limit=` | `200 { success, data, pagination }`; text filters case-insensitive; `date` = single day; `dateFrom>dateTo` → `400` |
+| `GET` | `/api/market-prices/context?commodity=&state=&district=&market=&limit=` | `commodity` required; `200 { success, filters, context:{ latestObservedAt, markets, observations, minOfMinPrice, maxOfMaxPrice, avgModalPrice }, records }`; no rows → `404` |
+
+Example:
+
+```bash
+curl "http://localhost:8000/api/market-prices?commodity=Onion&state=Maharashtra&page=1&limit=20"
+curl "http://localhost:8000/api/market-prices/context?commodity=Onion&state=Maharashtra"
+```
+
+### Known limitations
+
+- No live Agmarknet fetch/scheduler yet (manual CSV/API-row import only).
+- Same-key correction rows update prices in place; history of corrections is not kept.
+- Text search is `contains`-insensitive (no full-text index yet).
+- Buyer matching, offers, logistics, maps, weather, auth are out of scope.
+
 ## Notes for next modules
 
 - Matching, maps, auth are NOT implemented here — only schema + validation placeholders.

@@ -12,7 +12,8 @@
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev --name init",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "mandi:import": "node scripts/import-mandi-csv.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
