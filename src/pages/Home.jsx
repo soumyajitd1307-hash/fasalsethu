@@ -1,17 +1,15 @@
-import React, { useRef, useEffect, useState, Suspense, lazy } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useInView } from 'react-intersection-observer'
 import {
   Sprout, TrendingUp, MapPin, ShieldCheck, Zap, Users,
-  ArrowRight, ChevronDown, Wheat, Star, CheckCircle2,
-  BarChart3, Leaf, DollarSign, Package,
+  ArrowRight, Wheat, Star, CheckCircle2,
+  BarChart3, Leaf, DollarSign,
 } from 'lucide-react'
 import GrassStrip from '../components/GrassStrip'
 import FloatingParticles from '../components/FloatingParticles'
-import WindHeroCanvas from '../components/WindHeroCanvas'
-
-const Scene3D = lazy(() => import('../components/Scene3D'))
+import ScrollCanvas from '../components/ScrollCanvas'
 
 /* ── Animated counter ── */
 function Counter({ to, suffix = '', duration = 2000 }) {
@@ -207,392 +205,389 @@ const testimonials = [
 ]
 
 export default function Home() {
-  const heroRef = useRef(null)
-  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] })
-  const heroY       = useTransform(scrollYProgress, [0, 1], [0, 130])
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.65], [1, 0])
-
   const [demoModalOpen, setDemoModalOpen] = useState(false)
 
   return (
-    <main className="bg-white overflow-x-hidden">
+    <ScrollCanvas frameCount={300}>
+      {/*
+       * Everything inside ScrollCanvas renders on top of the fixed canvas.
+       * Section backgrounds use translucent glass so the animation shows through.
+       */}
+      <main className="overflow-x-hidden">
 
-      {/* ══════════════════════════════════════════
-          HERO — Haven Alpine Meadow with Living 3D WebGL Wind Vegetation
-      ══════════════════════════════════════════ */}
-      <section
-        ref={heroRef}
-        className="relative w-full h-screen min-h-[700px] flex flex-col items-center justify-center overflow-hidden"
-      >
-        {/* Fullscreen Living WebGL Background Canvas with 3D Wind Shader */}
-        <WindHeroCanvas
-          imageSrc="/hero-landscape.jpg"
-          fallbackSrc="/hero-reference.png"
-        />
+        {/* ══════════════════════════════════════════
+            HERO — Full-viewport, animation behind it
+        ══════════════════════════════════════════ */}
+        <section className="relative w-full h-screen min-h-[700px] flex flex-col items-center justify-center overflow-hidden">
 
-        {/* Soft atmospheric gradient for crisp UI contrast */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/20 pointer-events-none z-[1]" />
+          {/* Gradient overlay for legibility */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-black/35 pointer-events-none" />
 
-        {/* ── Center UI Content: Dead center of full-screen background photo ── */}
-        <motion.div
-          style={{ y: heroY, opacity: heroOpacity }}
-          className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center flex flex-col items-center justify-center select-none"
-        >
-          {/* Pill Badge: We just raised 20M🚀 */}
-          <motion.div
-            initial={{ opacity: 0, y: -16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full
-                       bg-white/85 backdrop-blur-md border border-white/60 shadow-[0_4px_16px_rgba(0,0,0,0.06)]
-                       text-xs font-semibold text-gray-800 mb-6 hover:bg-white hover:shadow-md transition-all cursor-default"
-          >
-            <span>We just raised 20M</span>
-            <span className="text-sm">🚀</span>
-          </motion.div>
+          {/* Center content */}
+          <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center flex flex-col items-center justify-center select-none">
 
-          {/* Heading: Design with ease. */}
-          <motion.h1
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="font-display font-black leading-[0.95] tracking-tight mb-5
-                       text-5xl sm:text-6xl md:text-7xl lg:text-[5.4rem] text-[#111827]"
-          >
-            Design with ease.
-          </motion.h1>
-
-          {/* Subtitle */}
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="text-gray-800 text-base sm:text-lg md:text-xl font-normal max-w-xl mx-auto mb-8 leading-relaxed"
-          >
-            Design smarter with AI that understands you.
-            <br />
-            So you can take a breath.
-          </motion.p>
-
-          {/* Action Buttons: Get Started → / Watch Demo centered */}
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-center gap-4 justify-center"
-          >
-            <a
-              href="#platform"
-              className="px-8 py-3.5 rounded-full bg-white text-[#111827] font-semibold text-sm sm:text-base
-                         shadow-[0_4px_20px_rgba(0,0,0,0.12)] hover:shadow-[0_6px_25px_rgba(0,0,0,0.18)]
-                         border border-black/5 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200
-                         flex items-center gap-2 group cursor-pointer"
-            >
-              <span>Get Started</span>
-              <span className="group-hover:translate-x-1 transition-transform">→</span>
-            </a>
-
-            <button
-              type="button"
-              onClick={() => setDemoModalOpen(true)}
-              className="px-6 py-3.5 rounded-full text-[#111827] font-semibold text-sm sm:text-base
-                         hover:bg-white/50 backdrop-blur-xs transition-all duration-200 cursor-pointer"
-            >
-              Watch Demo
-            </button>
-          </motion.div>
-        </motion.div>
-
-        {/* ── Bottom SCROLL Indicator ── */}
-        <motion.a
-          href="#platform"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.6 }}
-          className="absolute bottom-8 sm:bottom-10 left-1/2 -translate-x-1/2 z-20
-                     px-5 py-2 rounded-full bg-black/40 hover:bg-black/60
-                     backdrop-blur-md text-white/95 text-[11px] font-semibold
-                     tracking-widest uppercase border border-white/20 shadow-lg
-                     transition-all duration-200 flex items-center gap-1.5 cursor-pointer hover:scale-105"
-        >
-          <span>SCROLL</span>
-          <span className="text-xs">↓</span>
-        </motion.a>
-      </section>
-
-      {/* ── PLATFORM & LIVE TICKER ── */}
-      <div id="platform" className="border-t border-green-100 bg-white">
-        <CropTicker />
-      </div>
-
-      {/* ══════════════════════════════════════════
-          STATS — white cards on light-green strip
-      ══════════════════════════════════════════ */}
-      <section className="py-20 bg-green-50 relative overflow-hidden">
-        <FloatingParticles count={12} />
-        <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map(({ label, to, suffix, icon: Icon }, i) => (
-            <StatCard key={label} label={label} to={to} suffix={suffix} Icon={Icon} delay={i * 0.1} />
-          ))}
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          FEATURES — white bg
-      ══════════════════════════════════════════ */}
-      <section id="features" className="py-24 bg-white relative overflow-hidden">
-        <FloatingParticles count={16} />
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.55 }}
-          >
-            <p className="text-green-600 text-center text-xs font-semibold uppercase tracking-widest mb-3">
-              Platform Features
-            </p>
-            <h2 className="section-title text-gradient">Everything a Farmer Needs</h2>
-            <p className="section-subtitle">
-              From seed to sale — AgriBridge provides end-to-end tools to help every Indian
-              farmer maximise profit and eliminate the middleman.
-            </p>
-          </motion.div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map(f => <FeatureCard key={f.title} {...f} />)}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════
-          HOW IT WORKS — light green bg
-      ══════════════════════════════════════════ */}
-      <section id="how" className="py-24 bg-green-50 relative overflow-hidden">
-        <FloatingParticles count={14} />
-        <div className="max-w-6xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
-
-          {/* Steps */}
-          <div>
-            <p className="text-green-600 text-xs font-semibold uppercase tracking-widest mb-3">How It Works</p>
-            <h2 className="font-display font-black text-4xl md:text-5xl mb-3 text-gray-900">
-              Farmer to Buyer <br />
-              <span className="text-gradient">in 5 Simple Steps</span>
-            </h2>
-            <p className="text-gray-500 mb-10 text-sm leading-relaxed max-w-sm">
-              Our streamlined process takes you from farm gate to final payment in one seamless digital journey.
-            </p>
-            <div className="space-y-8">
-              {steps.map(s => <StepCard key={s.number} {...s} />)}
-            </div>
-          </div>
-
-          {/* Floating UI cards */}
-          <div className="relative h-[520px]">
-            <FloatingParticles count={10} />
-
-            {/* Market comparison card */}
+            {/* Pill Badge */}
             <motion.div
-              animate={{ y: [0, -12, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute top-0 right-0 w-72 bg-white border border-green-100
-                         rounded-3xl p-5 shadow-lg"
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full
+                         bg-white/90 backdrop-blur-md border border-white/60 shadow-[0_4px_16px_rgba(0,0,0,0.15)]
+                         text-xs font-semibold text-gray-800 mb-6 cursor-default"
             >
-              <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="w-5 h-5 text-green-600" />
-                <span className="font-display font-bold text-gray-900 text-sm">Market Comparison</span>
-              </div>
-              {[
-                { market: 'Pune APMC',    price: '₹1,280/qtl', net: '₹1,190', dist: '42 km', best: true },
-                { market: 'Nashik Mandi', price: '₹1,310/qtl', net: '₹1,140', dist: '80 km', best: false },
-                { market: 'Solapur Yard', price: '₹1,200/qtl', net: '₹1,120', dist: '95 km', best: false },
-              ].map(m => (
-                <div key={m.market}
-                  className={`flex items-center justify-between py-2 border-b border-gray-100 text-xs
-                              ${m.best ? 'text-green-700' : 'text-gray-500'}`}>
-                  <div>
-                    <p className="font-semibold">{m.market}</p>
-                    <p className="text-gray-400">{m.dist}</p>
-                  </div>
-                  <div className="text-right">
-                    <p>{m.price}</p>
-                    <p className={m.best ? 'text-green-600 font-bold' : ''}>{m.net} net</p>
-                  </div>
-                  {m.best && <CheckCircle2 className="w-4 h-4 text-green-500 ml-2" />}
-                </div>
-              ))}
-              <p className="mt-3 text-[11px] text-green-600 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Best net return: Pune APMC
-              </p>
+              <span>India's Smartest Farm-to-Market Platform</span>
+              <span className="text-sm">🌾</span>
             </motion.div>
 
-            {/* Buyer matches card */}
-            <motion.div
-              animate={{ y: [0, 10, 0] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-              className="absolute bottom-24 left-0 w-64 bg-white border border-green-100
-                         rounded-3xl p-5 shadow-lg"
+            {/* Heading */}
+            <motion.h1
+              initial={{ opacity: 0, y: 22 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+              className="font-display font-black leading-[0.95] tracking-tight mb-5
+                         text-5xl sm:text-6xl md:text-7xl lg:text-[5.5rem] text-white drop-shadow-2xl"
             >
-              <div className="flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4 text-green-600" />
-                <span className="font-display font-bold text-gray-900 text-xs">Matched Buyers</span>
-              </div>
-              {[
-                { name: 'Agro Traders Pvt Ltd', offer: '₹1,260/qtl', dist: '28 km' },
-                { name: 'Fresh Exports Co.',    offer: '₹1,240/qtl', dist: '55 km' },
-              ].map(b => (
-                <div key={b.name} className="py-2 border-b border-gray-100 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-800">{b.name}</span>
-                    <span className="text-green-500 text-[10px] font-bold">✓ VERIFIED</span>
-                  </div>
-                  <div className="text-gray-400 flex justify-between mt-0.5">
-                    <span>{b.offer}</span><span>{b.dist}</span>
-                  </div>
-                </div>
-              ))}
-            </motion.div>
+              Farm. Connect.
+              <br />
+              <span className="text-green-300">Prosper.</span>
+            </motion.h1>
 
-            {/* Central verified badge */}
-            <motion.div
-              animate={{ scale: [1, 1.06, 1] }}
-              transition={{ duration: 3, repeat: Infinity }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-                         w-24 h-24 rounded-full bg-green-600 shadow-xl
-                         flex flex-col items-center justify-center text-center"
+            {/* Subtitle */}
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="text-white/90 text-base sm:text-lg md:text-xl font-normal
+                         max-w-xl mx-auto mb-8 leading-relaxed drop-shadow-lg"
             >
-              <ShieldCheck className="w-8 h-8 text-white mb-0.5" />
-              <span className="text-[10px] text-green-100 font-bold leading-tight">100%<br/>VERIFIED</span>
-            </motion.div>
-          </div>
-        </div>
-      </section>
+              Connecting farmers with verified buyers, live mandi prices,
+              and geo-matched buyer discovery across India.
+            </motion.p>
 
-      {/* ══════════════════════════════════════════
-          TESTIMONIALS — white bg
-      ══════════════════════════════════════════ */}
-      <section className="py-24 bg-white relative overflow-hidden">
-        <FloatingParticles count={14} />
-        <div className="max-w-6xl mx-auto px-6">
-          <p className="text-green-600 text-center text-xs font-semibold uppercase tracking-widest mb-3">Real Stories</p>
-          <h2 className="section-title text-gradient">Farmers Are Winning</h2>
-          <p className="section-subtitle">
-            Thousands of farmers and buyers across India are transforming their livelihoods with AgriBridge.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map(t => <TestimonialCard key={t.name} {...t} />)}
-          </div>
-        </div>
-      </section>
+            {/* Action Buttons */}
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="flex items-center gap-4 justify-center"
+            >
+              <a
+                href="#platform"
+                className="px-8 py-3.5 rounded-full bg-white text-[#111827] font-semibold text-sm sm:text-base
+                           shadow-[0_4px_20px_rgba(0,0,0,0.25)] hover:shadow-[0_6px_28px_rgba(0,0,0,0.35)]
+                           border border-black/5 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200
+                           flex items-center gap-2 group cursor-pointer"
+              >
+                <span>Get Started</span>
+                <span className="group-hover:translate-x-1 transition-transform">→</span>
+              </a>
 
-      {/* ══════════════════════════════════════════
-          CTA BANNER — light green bg + grass
-      ══════════════════════════════════════════ */}
-      <section id="about" className="py-24 bg-green-50 relative overflow-hidden">
-        <FloatingParticles count={18} />
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="bg-white border border-green-100 rounded-3xl p-14 shadow-lg"
-          >
-            <div className="w-20 h-20 rounded-full bg-green-600 flex items-center justify-center
-                            mx-auto mb-6 shadow-xl animate-float">
-              <Sprout className="w-10 h-10 text-white" />
-            </div>
-            <h2 className="font-display font-black text-4xl md:text-5xl mb-4 text-gray-900">
-              Start Your Journey<br />
-              <span className="text-gradient">Today — It's Free</span>
-            </h2>
-            <p className="text-gray-500 mb-8 max-w-lg mx-auto text-sm leading-relaxed">
-              Join 142,000+ farmers and 8,500+ buyers already using AgriBridge to trade
-              smarter, faster, and more profitably.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/seller"
-                className="flex items-center justify-center gap-2 px-10 py-4 rounded-full
-                           font-semibold text-base bg-green-700 text-white shadow-md
-                           hover:bg-green-600 hover:-translate-y-0.5 transition-all group">
-                🌾 Register as Farmer
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link to="/buyer"
-                className="flex items-center justify-center gap-2 px-10 py-4 rounded-full
-                           font-semibold text-base border-2 border-green-600 text-green-700
-                           hover:bg-green-600 hover:text-white hover:-translate-y-0.5
-                           transition-all group">
-                🛒 Register as Buyer
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Grass before footer */}
-        <div className="relative h-16 mt-16 overflow-hidden">
-          <GrassStrip density={90} heightMin={16} heightMax={60} />
-        </div>
-      </section>
-
-      {/* ── Watch Demo Modal ── */}
-      {demoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full border-2 border-[#ea580c] flex items-center justify-center">
-                  <div className="w-2 h-2 rounded-full bg-[#ea580c]" />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-gray-900 text-lg">Product Walkthrough</h3>
-                  <p className="text-gray-500 text-xs">AI-driven Agricultural Trading & Linkage Platform</p>
-                </div>
-              </div>
               <button
                 type="button"
-                onClick={() => setDemoModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+                onClick={() => setDemoModalOpen(true)}
+                className="px-6 py-3.5 rounded-full text-white font-semibold text-sm sm:text-base
+                           bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/30
+                           shadow-[0_4px_16px_rgba(0,0,0,0.2)] transition-all duration-200 cursor-pointer"
               >
-                ✕
+                Watch Demo
               </button>
+            </motion.div>
+          </div>
+
+          {/* Scroll indicator */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7, duration: 0.6 }}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10
+                       px-5 py-2 rounded-full bg-black/35
+                       backdrop-blur-md text-white/90 text-[11px] font-semibold
+                       tracking-widest uppercase border border-white/20 shadow-lg
+                       flex items-center gap-1.5"
+          >
+            <span>SCROLL</span>
+            <motion.span
+              animate={{ y: [0, 4, 0] }}
+              transition={{ duration: 1.4, repeat: Infinity }}
+              className="text-xs"
+            >↓</motion.span>
+          </motion.div>
+        </section>
+
+        {/* ── PLATFORM & LIVE TICKER ── */}
+        <div id="platform" className="border-t border-white/10">
+          <CropTicker />
+        </div>
+
+        {/* ══════════════════════════════════════════
+            STATS
+        ══════════════════════════════════════════ */}
+        <section className="py-20 relative overflow-hidden">
+          <FloatingParticles count={12} />
+          <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.map(({ label, to, suffix, icon: Icon }, i) => (
+              <StatCard key={label} label={label} to={to} suffix={suffix} Icon={Icon} delay={i * 0.1} />
+            ))}
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════════
+            FEATURES
+        ══════════════════════════════════════════ */}
+        <section id="features" className="py-24 relative overflow-hidden">
+          <FloatingParticles count={16} />
+          <div className="max-w-7xl mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.55 }}
+            >
+              <p className="text-green-300 text-center text-xs font-semibold uppercase tracking-widest mb-3 drop-shadow">
+                Platform Features
+              </p>
+              <h2 className="section-title text-white drop-shadow-2xl">Everything a Farmer Needs</h2>
+              <p className="section-subtitle text-white/80 drop-shadow">
+                From seed to sale — AgriBridge provides end-to-end tools to help every Indian
+                farmer maximise profit and eliminate the middleman.
+              </p>
+            </motion.div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {features.map(f => <FeatureCard key={f.title} {...f} />)}
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════════
+            HOW IT WORKS
+        ══════════════════════════════════════════ */}
+        <section id="how" className="py-24 relative overflow-hidden">
+          <FloatingParticles count={14} />
+          <div className="max-w-6xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
+
+            {/* Steps */}
+            <div>
+              <p className="text-green-300 text-xs font-semibold uppercase tracking-widest mb-3">How It Works</p>
+              <h2 className="font-display font-black text-4xl md:text-5xl mb-3 text-white">
+                Farmer to Buyer <br />
+                <span className="text-green-300">in 5 Simple Steps</span>
+              </h2>
+              <p className="text-green-100/80 mb-10 text-sm leading-relaxed max-w-sm">
+                Our streamlined process takes you from farm gate to final payment in one seamless digital journey.
+              </p>
+              <div className="space-y-8">
+                {steps.map(s => <StepCard key={s.number} {...s} />)}
+              </div>
             </div>
 
-            {/* Modal Body: Interactive Preview */}
-            <div className="p-8 bg-gray-50 flex flex-col items-center text-center">
-              <div className="w-full aspect-video rounded-2xl bg-gradient-to-br from-green-900 to-emerald-950 p-8 flex flex-col items-center justify-center text-white relative overflow-hidden shadow-inner">
-                <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-4 border border-white/30 animate-pulse">
-                  <span className="text-2xl">▶</span>
+            {/* Floating UI cards — UNCHANGED */}
+            <div className="relative h-[520px]">
+              <FloatingParticles count={10} />
+
+              {/* Market comparison card */}
+              <motion.div
+                animate={{ y: [0, -12, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute top-0 right-0 w-72 bg-white border border-green-100
+                           rounded-3xl p-5 shadow-lg"
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart3 className="w-5 h-5 text-green-600" />
+                  <span className="font-display font-bold text-gray-900 text-sm">Market Comparison</span>
                 </div>
-                <h4 className="font-display font-bold text-xl mb-2">Instant Mandi Price Discovery & Direct Buyer Matching</h4>
-                <p className="text-green-200 text-sm max-w-md">
-                  Watch how farmers compare real-time prices across 3,200+ mandis, calculate exact logistics deductions, and close verified deals in minutes.
+                {[
+                  { market: 'Pune APMC',    price: '₹1,280/qtl', net: '₹1,190', dist: '42 km', best: true },
+                  { market: 'Nashik Mandi', price: '₹1,310/qtl', net: '₹1,140', dist: '80 km', best: false },
+                  { market: 'Solapur Yard', price: '₹1,200/qtl', net: '₹1,120', dist: '95 km', best: false },
+                ].map(m => (
+                  <div key={m.market}
+                    className={`flex items-center justify-between py-2 border-b border-gray-100 text-xs
+                                ${m.best ? 'text-green-700' : 'text-gray-500'}`}>
+                    <div>
+                      <p className="font-semibold">{m.market}</p>
+                      <p className="text-gray-400">{m.dist}</p>
+                    </div>
+                    <div className="text-right">
+                      <p>{m.price}</p>
+                      <p className={m.best ? 'text-green-600 font-bold' : ''}>{m.net} net</p>
+                    </div>
+                    {m.best && <CheckCircle2 className="w-4 h-4 text-green-500 ml-2" />}
+                  </div>
+                ))}
+                <p className="mt-3 text-[11px] text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Best net return: Pune APMC
                 </p>
+              </motion.div>
+
+              {/* Buyer matches card */}
+              <motion.div
+                animate={{ y: [0, 10, 0] }}
+                transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+                className="absolute bottom-24 left-0 w-64 bg-white border border-green-100
+                           rounded-3xl p-5 shadow-lg"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Users className="w-4 h-4 text-green-600" />
+                  <span className="font-display font-bold text-gray-900 text-xs">Matched Buyers</span>
+                </div>
+                {[
+                  { name: 'Agro Traders Pvt Ltd', offer: '₹1,260/qtl', dist: '28 km' },
+                  { name: 'Fresh Exports Co.',    offer: '₹1,240/qtl', dist: '55 km' },
+                ].map(b => (
+                  <div key={b.name} className="py-2 border-b border-gray-100 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-800">{b.name}</span>
+                      <span className="text-green-500 text-[10px] font-bold">✓ VERIFIED</span>
+                    </div>
+                    <div className="text-gray-400 flex justify-between mt-0.5">
+                      <span>{b.offer}</span><span>{b.dist}</span>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+
+              {/* Central verified badge */}
+              <motion.div
+                animate={{ scale: [1, 1.06, 1] }}
+                transition={{ duration: 3, repeat: Infinity }}
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                           w-24 h-24 rounded-full bg-green-600 shadow-xl
+                           flex flex-col items-center justify-center text-center"
+              >
+                <ShieldCheck className="w-8 h-8 text-white mb-0.5" />
+                <span className="text-[10px] text-green-100 font-bold leading-tight">100%<br/>VERIFIED</span>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════════
+            TESTIMONIALS
+        ══════════════════════════════════════════ */}
+        <section className="py-24 relative overflow-hidden">
+          <FloatingParticles count={14} />
+          <div className="max-w-6xl mx-auto px-6">
+            <p className="text-green-300 text-center text-xs font-semibold uppercase tracking-widest mb-3 drop-shadow">Real Stories</p>
+            <h2 className="section-title text-white drop-shadow-2xl">Farmers Are Winning</h2>
+            <p className="section-subtitle text-white/80 drop-shadow">
+              Thousands of farmers and buyers across India are transforming their livelihoods with AgriBridge.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {testimonials.map(t => <TestimonialCard key={t.name} {...t} />)}
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════════
+            CTA BANNER
+        ══════════════════════════════════════════ */}
+        <section id="about" className="py-24 relative overflow-hidden">
+          <FloatingParticles count={18} />
+          <div className="max-w-4xl mx-auto px-6 text-center">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="bg-white border border-green-100 rounded-3xl p-14 shadow-lg"
+            >
+              <div className="w-20 h-20 rounded-full bg-green-600 flex items-center justify-center
+                              mx-auto mb-6 shadow-xl animate-float">
+                <Sprout className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="font-display font-black text-4xl md:text-5xl mb-4 text-gray-900">
+                Start Your Journey<br />
+                <span className="text-gradient">Today — It's Free</span>
+              </h2>
+              <p className="text-gray-500 mb-8 max-w-lg mx-auto text-sm leading-relaxed">
+                Join 142,000+ farmers and 8,500+ buyers already using AgriBridge to trade
+                smarter, faster, and more profitably.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link to="/seller"
+                  className="flex items-center justify-center gap-2 px-10 py-4 rounded-full
+                             font-semibold text-base bg-green-700 text-white shadow-md
+                             hover:bg-green-600 hover:-translate-y-0.5 transition-all group">
+                  🌾 Register as Farmer
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Link>
+                <Link to="/buyer"
+                  className="flex items-center justify-center gap-2 px-10 py-4 rounded-full
+                             font-semibold text-base border-2 border-green-600 text-green-700
+                             hover:bg-green-600 hover:text-white hover:-translate-y-0.5
+                             transition-all group">
+                  🛒 Register as Buyer
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Grass before footer */}
+          <div className="relative h-16 mt-16 overflow-hidden">
+            <GrassStrip density={90} heightMin={16} heightMax={60} />
+          </div>
+        </section>
+
+        {/* ── Watch Demo Modal ── */}
+        {demoModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full border-2 border-[#ea580c] flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-[#ea580c]" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-gray-900 text-lg">Product Walkthrough</h3>
+                    <p className="text-gray-500 text-xs">AI-driven Agricultural Trading & Linkage Platform</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDemoModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mt-6">
-                <Link
-                  to="/seller"
-                  onClick={() => setDemoModalOpen(false)}
-                  className="p-4 rounded-2xl bg-white border border-green-200 text-left hover:border-green-400 hover:shadow-md transition-all group"
-                >
-                  <p className="font-bold text-gray-900 text-sm group-hover:text-green-700">🌾 Explore Farmer Experience →</p>
-                  <p className="text-gray-500 text-xs mt-1">Upload crop batches, view geo-matched buyers & mandi price matrix</p>
-                </Link>
-                <Link
-                  to="/buyer"
-                  onClick={() => setDemoModalOpen(false)}
-                  className="p-4 rounded-2xl bg-white border border-green-200 text-left hover:border-green-400 hover:shadow-md transition-all group"
-                >
-                  <p className="font-bold text-gray-900 text-sm group-hover:text-green-700">🛒 Explore Buyer Experience →</p>
-                  <p className="text-gray-500 text-xs mt-1">Post procurement requirements & match directly with local farms</p>
-                </Link>
+              {/* Modal Body */}
+              <div className="p-8 bg-gray-50 flex flex-col items-center text-center">
+                <div className="w-full aspect-video rounded-2xl bg-gradient-to-br from-green-900 to-emerald-950 p-8 flex flex-col items-center justify-center text-white relative overflow-hidden shadow-inner">
+                  <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-4 border border-white/30 animate-pulse">
+                    <span className="text-2xl">▶</span>
+                  </div>
+                  <h4 className="font-display font-bold text-xl mb-2">Instant Mandi Price Discovery & Direct Buyer Matching</h4>
+                  <p className="text-green-200 text-sm max-w-md">
+                    Watch how farmers compare real-time prices across 3,200+ mandis, calculate exact logistics deductions, and close verified deals in minutes.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mt-6">
+                  <Link
+                    to="/seller"
+                    onClick={() => setDemoModalOpen(false)}
+                    className="p-4 rounded-2xl bg-white border border-green-200 text-left hover:border-green-400 hover:shadow-md transition-all group"
+                  >
+                    <p className="font-bold text-gray-900 text-sm group-hover:text-green-700">🌾 Explore Farmer Experience →</p>
+                    <p className="text-gray-500 text-xs mt-1">Upload crop batches, view geo-matched buyers & mandi price matrix</p>
+                  </Link>
+                  <Link
+                    to="/buyer"
+                    onClick={() => setDemoModalOpen(false)}
+                    className="p-4 rounded-2xl bg-white border border-green-200 text-left hover:border-green-400 hover:shadow-md transition-all group"
+                  >
+                    <p className="font-bold text-gray-900 text-sm group-hover:text-green-700">🛒 Explore Buyer Experience →</p>
+                    <p className="text-gray-500 text-xs mt-1">Post procurement requirements & match directly with local farms</p>
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </main>
+        )}
+      </main>
+    </ScrollCanvas>
   )
 }

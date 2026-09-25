@@ -9,4 +9,19 @@ export default defineConfig({
       usePolling: true,
     },
   },
+  build: {
+    // Bump chunk warning limit (scroll frame images are fetched dynamically, not bundled)
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          motion: ['framer-motion'],
+          three: ['three', '@react-three/fiber', '@react-three/drei'],
+          router: ['react-router-dom'],
+        },
+      },
+    },
+  },
 })
+

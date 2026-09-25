@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>AgriBridge</title>
+    <script>
+      // Single Page Apps for GitHub Pages redirect
+      // Converts 404 path into hash route for HashRouter
+      const pathSegments = window.location.pathname.split('/').filter(Boolean);
+      const repoName = 'fasalsethu';
+      let subRoute = '';
+      if (pathSegments.length > 0 && pathSegments[0] === repoName) {
+        subRoute = '/' + pathSegments.slice(1).join('/');
+      } else {
+        subRoute = '/' + pathSegments.join('/');
+      }
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      const redirectUrl = window.location.origin + '/' + repoName + '/#' + subRoute + search + hash;
+      window.location.replace(redirectUrl);
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to AgriBridge...</p>
+  </body>
+</html>

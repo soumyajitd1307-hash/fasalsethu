@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { HashRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
@@ -54,7 +54,7 @@ function AnimatedRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
+    <HashRouter>
       <ScrollToTop />
       <div className="relative min-h-screen bg-white">
         <Navbar />
@@ -63,6 +63,6 @@ export default function App() {
         </Suspense>
         <Footer />
       </div>
-    </BrowserRouter>
+    </HashRouter>
   )
 }

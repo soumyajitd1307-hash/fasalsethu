@@ -134,8 +134,8 @@ void main() {
 `
 
 export default function WindHeroCanvas({
-  imageSrc = '/hero-landscape.jpg',
-  fallbackSrc = '/hero-reference.png',
+  imageSrc = `${import.meta.env.BASE_URL}hero-landscape.jpg`,
+  fallbackSrc = `${import.meta.env.BASE_URL}hero-reference.png`,
   className = '',
 }) {
   const canvasRef = useRef(null)
