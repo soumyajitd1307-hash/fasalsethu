@@ -61,8 +61,9 @@ npm run db:deploy
 npm run db:studio
 ```
 
-Tables: `farmers`, `buyers`, `crop_listings`, `buyer_requirements`.
+Tables: `farmers`, `buyers`, `crop_listings`, `buyer_requirements`, `market_prices`.
 Relations: `Farmer 1—N CropListing`, `Buyer 1—N BuyerRequirement` (FK cascade delete).
+Applied migration: `backend/prisma/migrations/20260925130308_init_marketplace_schema` (all five tables + indexes; verified against live PostgreSQL in Task 5).
 
 ## Start
 
@@ -157,7 +158,7 @@ No government dataset file ships with this repository (searched for CSV/XLSX/JSO
 
 `parseCsvText` (dependency-free CSV incl. quotes/commas) → `importRecords(rows, { source, chunkSize=500 })`: validate → normalize → in-batch dedup → one batched `findMany OR` lookup per chunk → create / update-on-price-change / duplicate-skip. Returns `{ total, valid, invalid, inserted, updated, duplicates, errors[] }` (up to 25 samples of `{ index, errors }`); nothing is silently discarded.
 
-Normalization rules: trim/collapse whitespace; prices strip `₹`, commas, `Rs`; dates accept `DD/MM/YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`, ISO; unit maps quintal/qtl, kg, tonne variants (default quintal); reject missing commodity/market/state, non-numeric/negative prices, `min > max`, bad dates; tolerate modal outside `[min, max]` (real source anomaly). Dedup key: commodity|variety|grade|market|district|state|day|unit (lowercased).
+Normalization rules: trim/collapse whitespace; prices strip `₹`, commas, `Rs`; dates accept `DD/MM/YYYY`, `DD-MM-YYYY`, `YYYY-MM-DD`, ISO; unit maps quintal/qtl, kg, tonne variants (default quintal); reject missing commodity/market/state, non-numeric/negative prices, `min > max`, bad dates; tolerate modal outside `[min, max]` (real source anomaly). Dedup key: commodity|variety|grade|market|district|state|day|unit (lowercased). Within one file the last row wins (later rows are treated as corrections); across imports, changed prices update the stored observation while identical rows count as duplicates.
 
 Run it:
 
