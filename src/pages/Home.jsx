@@ -226,18 +226,6 @@ export default function Home() {
           {/* Center content */}
           <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center flex flex-col items-center justify-center select-none">
 
-            {/* Pill Badge */}
-            <motion.div
-              initial={{ opacity: 0, y: -16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full
-                         bg-white/90 backdrop-blur-md border border-white/60 shadow-[0_4px_16px_rgba(0,0,0,0.15)]
-                         text-xs font-semibold text-gray-800 mb-6 cursor-default"
-            >
-              <span>India's Smartest Farm-to-Market Platform</span>
-              <span className="text-sm">🌾</span>
-            </motion.div>
 
             {/* Heading */}
             <motion.h1
