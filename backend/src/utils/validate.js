@@ -128,6 +128,27 @@ const paginationQuerySchema = z.object({
     .default(20),
 });
 
+// --- Crop Listing API schemas (B1 Task 3) ---
+// Mirrors the Prisma CropListing model: no market/mandi price fields,
+// no buyerId/district/state. Clients must NOT set id / createdAt / updatedAt
+// (.strict() rejects them). status uses the shared listing-status enum
+// (schema default OPEN applies when omitted); availableFrom is optional.
+const cropListingCreateSchema = z
+  .object({
+    farmerId: z.string().trim().min(1, 'farmerId is required'),
+    cropName: z.string().trim().min(1, 'cropName is required'),
+    quantity: z.number().positive('quantity must be > 0'),
+    unit: z.string().trim().min(1, 'unit is required (e.g. quintal, kg, tonne)'),
+    expectedPrice: z.number().nonnegative('expectedPrice must be >= 0'),
+    availableFrom: z.coerce.date().optional(),
+    status: statusSchema.optional(),
+    latitude: latSchema.optional(),
+    longitude: lngSchema.optional(),
+  })
+  .strict();
+
+const cropListingUpdateSchema = cropListingCreateSchema.partial().strict();
+
 module.exports = {
   farmerSchema,
   buyerSchema,
@@ -135,6 +156,8 @@ module.exports = {
   buyerRequirementSchema,
   farmerCreateSchema,
   farmerUpdateSchema,
+  cropListingCreateSchema,
+  cropListingUpdateSchema,
   paginationQuerySchema,
   validateBody,
   validateQuery,
