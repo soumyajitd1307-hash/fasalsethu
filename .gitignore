@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Backend (FasalSethu) — secrets & generated files
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/node_modules/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
