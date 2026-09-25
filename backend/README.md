@@ -109,9 +109,14 @@ Requires live `DATABASE_URL` (endpoints return `503` when unconfigured).
 - Create accepts only `name, phone, email?, village?, district?, state?, latitude?, longitude?` (`kycStatus` defaults to `PENDING`). Update additionally accepts `kycStatus`. `id/createdAt/updatedAt/trustScore` are rejected.
 - Errors: `400` validation, `404` not found, `409` duplicate email, via central error handler.
 
-## Crop Listing API (B1 Task 3)
+## Crop Listing API (B1 Task 3 + 3.5)
 
 Bridge between Farmer and the future market/mandi + matching systems. Every listing belongs to an existing farmer (`farmerId`); mandi/market-price integration is NOT implemented yet.
+
+Listings store a farmer-defined acceptable selling-price range:
+
+- `minExpectedPrice` / `maxExpectedPrice` (both required on create, both `>= 0`, `min <= max`)
+- Future market-price functionality will show mandi min/modal/max as context so the farmer can pick this range; no mandi validation is enforced yet.
 
 Requires live `DATABASE_URL` (endpoints return `503` when unconfigured).
 
@@ -123,8 +128,8 @@ Requires live `DATABASE_URL` (endpoints return `503` when unconfigured).
 | `PATCH` | `/api/crop-listings/:id` | `200 { success: true, data }` |
 | `DELETE` | `/api/crop-listings/:id` | `200 { success: true, data }` (farmer untouched) |
 
-- Create accepts only `farmerId, cropName, quantity, unit, expectedPrice, availableFrom?, status?, latitude?, longitude?` (`status` defaults to `OPEN`). Update accepts the same fields, all optional; changing `farmerId` re-verifies the new farmer. `id/createdAt/updatedAt` and unknown fields (e.g. `marketPrice`, `buyerId`) are rejected.
-- Validation: `quantity > 0`, `expectedPrice >= 0`, `status ∈ OPEN | MATCHED | IN_PROGRESS | COMPLETED | CANCELLED | EXPIRED`, `availableFrom` valid date, lat ±90 / lng ±180.
+- Create accepts only `farmerId, cropName, quantity, unit, minExpectedPrice, maxExpectedPrice, availableFrom?, status?, latitude?, longitude?` (`status` defaults to `OPEN`). Update accepts the same fields, all optional; changing `farmerId` re-verifies the new farmer. Partial price updates are checked against the stored record so `min <= max` always holds. `id/createdAt/updatedAt` and unknown fields (e.g. the old `expectedPrice`, `marketPrice`, `buyerId`) are rejected.
+- Validation: `quantity > 0`, `minExpectedPrice >= 0`, `maxExpectedPrice >= 0`, `minExpectedPrice <= maxExpectedPrice` (`min = max` allowed, `0/0` allowed), `status ∈ OPEN | MATCHED | IN_PROGRESS | COMPLETED | CANCELLED | EXPIRED`, `availableFrom` valid date, lat ±90 / lng ±180.
 - Pagination: defaults `page=1, limit=20`, max `limit=100`; invalid values → `400`; stable `createdAt desc` ordering.
 - Errors: `400` validation, `404` listing/farmer not found, `409` unique conflict, via central error handler (no raw Prisma errors).
 
@@ -133,7 +138,7 @@ Example create:
 ```bash
 curl -X POST http://localhost:8000/api/crop-listings \
   -H "Content-Type: application/json" \
-  -d '{"farmerId":"<farmer-id>","cropName":"Wheat","quantity":10,"unit":"quintal","expectedPrice":2200}'
+  -d '{"farmerId":"<farmer-id>","cropName":"Onion","quantity":1000,"unit":"kg","minExpectedPrice":24,"maxExpectedPrice":28}'
 ```
 
 ## Notes for next modules

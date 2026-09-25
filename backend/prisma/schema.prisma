@@ -57,19 +57,20 @@ model Buyer {
 }
 
 model CropListing {
-  id            String    @id @default(cuid())
-  farmerId      String
-  farmer        Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
-  cropName      String
-  quantity      Float
-  unit          String
-  expectedPrice Float
-  availableFrom DateTime?
-  status        String    @default("OPEN")
-  latitude      Float?
-  longitude     Float?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  farmerId         String
+  farmer           Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  cropName         String
+  quantity         Float
+  unit             String
+  minExpectedPrice Float
+  maxExpectedPrice Float
+  availableFrom    DateTime?
+  status           String    @default("OPEN")
+  latitude         Float?
+  longitude        Float?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([farmerId])
   @@index([cropName, status])

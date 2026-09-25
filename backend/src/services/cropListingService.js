@@ -1,6 +1,8 @@
-// Crop Listing service — all CropListing DB/business logic lives here (B1 Task 3).
+// Crop Listing service — all CropListing DB/business logic lives here (B1 Task 3 + 3.5).
 // Follows the Farmer service pattern: Prisma errors become clean HTTP errors.
 // Every listing must belong to an existing farmer (no orphans).
+// Pricing is a farmer-defined range: minExpectedPrice <= maxExpectedPrice
+// (no mandi coupling yet — the mandi module does not exist).
 const { getPrisma } = require('../config/database');
 
 function listingNotFound(id) {
@@ -94,10 +96,27 @@ async function getCropListingById(id) {
   return listing;
 }
 
+function priceRangeError() {
+  const err = new Error('minExpectedPrice must be <= maxExpectedPrice');
+  err.status = 400;
+  return err;
+}
+
 async function updateCropListing(id, data) {
   const prisma = clientOrThrow();
   if (data.farmerId !== undefined) {
     await assertFarmerExists(prisma, data.farmerId);
+  }
+  // Partial updates must not leave min > max in the DB: check the patch
+  // against the stored record whenever either bound is being changed.
+  if (data.minExpectedPrice !== undefined || data.maxExpectedPrice !== undefined) {
+    const existing = await prisma.cropListing.findUnique({ where: { id } });
+    if (!existing) throw listingNotFound(id);
+    const effectiveMin =
+      data.minExpectedPrice !== undefined ? data.minExpectedPrice : existing.minExpectedPrice;
+    const effectiveMax =
+      data.maxExpectedPrice !== undefined ? data.maxExpectedPrice : existing.maxExpectedPrice;
+    if (effectiveMin > effectiveMax) throw priceRangeError();
   }
   try {
     return await prisma.cropListing.update({ where: { id }, data });

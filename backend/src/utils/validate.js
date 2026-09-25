@@ -39,7 +39,8 @@ const cropListingSchema = z.object({
   cropName: z.string().trim().min(2, 'cropName is required'),
   quantity: z.number().positive('quantity must be > 0'),
   unit: z.string().trim().min(1, 'unit is required (e.g. quintal, kg, tonne)'),
-  expectedPrice: z.number().nonnegative('expectedPrice must be >= 0'),
+  minExpectedPrice: z.number().nonnegative('minExpectedPrice must be >= 0'),
+  maxExpectedPrice: z.number().nonnegative('maxExpectedPrice must be >= 0'),
   availableFrom: z.coerce.date().optional(),
   status: statusSchema.optional(),
   latitude: latSchema.optional(),
@@ -128,26 +129,51 @@ const paginationQuerySchema = z.object({
     .default(20),
 });
 
-// --- Crop Listing API schemas (B1 Task 3) ---
-// Mirrors the Prisma CropListing model: no market/mandi price fields,
+// --- Crop Listing API schemas (B1 Task 3 + 3.5) ---
+// Mirrors the Prisma CropListing model: farmer-defined price RANGE
+// (minExpectedPrice/maxExpectedPrice), no market/mandi price fields,
 // no buyerId/district/state. Clients must NOT set id / createdAt / updatedAt
-// (.strict() rejects them). status uses the shared listing-status enum
-// (schema default OPEN applies when omitted); availableFrom is optional.
-const cropListingCreateSchema = z
-  .object({
-    farmerId: z.string().trim().min(1, 'farmerId is required'),
-    cropName: z.string().trim().min(1, 'cropName is required'),
-    quantity: z.number().positive('quantity must be > 0'),
-    unit: z.string().trim().min(1, 'unit is required (e.g. quintal, kg, tonne)'),
-    expectedPrice: z.number().nonnegative('expectedPrice must be >= 0'),
-    availableFrom: z.coerce.date().optional(),
-    status: statusSchema.optional(),
-    latitude: latSchema.optional(),
-    longitude: lngSchema.optional(),
-  })
-  .strict();
+// (.strict() rejects them, including the old `expectedPrice` field).
+// status uses the shared listing-status enum (schema default OPEN applies
+// when omitted); availableFrom is optional. No mandi coupling yet: only
+// min >= 0, max >= 0, min <= max is enforced.
+function checkPriceRange(data, ctx) {
+  if (
+    data.minExpectedPrice !== undefined &&
+    data.maxExpectedPrice !== undefined &&
+    data.minExpectedPrice > data.maxExpectedPrice
+  ) {
+    ctx.addIssue({
+      code: z.ZOD_ISSUE_CUSTOM,
+      message: 'minExpectedPrice must be <= maxExpectedPrice',
+      path: ['minExpectedPrice'],
+    });
+  }
+}
 
-const cropListingUpdateSchema = cropListingCreateSchema.partial().strict();
+const cropListingFieldShape = {
+  farmerId: z.string().trim().min(1, 'farmerId is required'),
+  cropName: z.string().trim().min(1, 'cropName is required'),
+  quantity: z.number().positive('quantity must be > 0'),
+  unit: z.string().trim().min(1, 'unit is required (e.g. quintal, kg, tonne)'),
+  minExpectedPrice: z.number().nonnegative('minExpectedPrice must be >= 0'),
+  maxExpectedPrice: z.number().nonnegative('maxExpectedPrice must be >= 0'),
+  availableFrom: z.coerce.date().optional(),
+  status: statusSchema.optional(),
+  latitude: latSchema.optional(),
+  longitude: lngSchema.optional(),
+};
+
+const cropListingCreateSchema = z
+  .object(cropListingFieldShape)
+  .strict()
+  .superRefine(checkPriceRange);
+
+const cropListingUpdateSchema = z
+  .object(cropListingFieldShape)
+  .partial()
+  .strict()
+  .superRefine(checkPriceRange);
 
 module.exports = {
   farmerSchema,
