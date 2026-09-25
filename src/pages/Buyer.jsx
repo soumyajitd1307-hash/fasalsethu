@@ -10,103 +10,125 @@ import {
 import GrassStrip from '../components/GrassStrip'
 import FloatingParticles from '../components/FloatingParticles'
 import PriceComparisonMatrix from '../components/PriceComparisonMatrix'
+import BuyerDashboard from '../components/BuyerDashboard'
+import { marketplaceService } from '../services/marketplaceService'
 
 /* ── Buyer search panel ── */
 function BuyerSearchPanel() {
-  const [search, setSearch] = useState({ crop: '', qty: '', location: '', maxDist: '100' })
+  const [search, setSearch] = useState({ crop: 'Onion (Nashik Red)', qty: '200', location: 'Nashik', maxDist: '50' })
+  const [results, setResults] = useState([])
   const [searched, setSearched] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const mockResults = [
-    { name: 'Ramesh Patil',  crop: 'Onion', qty: '500–2000 qtl', price: '₹1,260/qtl', dist: '28 km', rating: 4.8, verified: true,  history: 42, badge: 'TOP SELLER' },
-    { name: 'Sunita Farms',  crop: 'Onion', qty: '100–800 qtl',  price: '₹1,240/qtl', dist: '45 km', rating: 4.6, verified: true,  history: 28, badge: 'TRUSTED' },
-    { name: 'Green Valley',  crop: 'Onion', qty: '200–1500 qtl', price: '₹1,220/qtl', dist: '62 km', rating: 4.4, verified: false, history: 15, badge: 'NEW' },
-  ]
+  async function handleSearch() {
+    setLoading(true)
+    setSearched(true)
+    try {
+      const inventory = await marketplaceService.getFarmerInventory()
+      const filtered = inventory.filter(item => {
+        if (search.crop && !item.crop.toLowerCase().includes(search.crop.toLowerCase().split(' ')[0])) {
+          return false
+        }
+        return true
+      })
+      setResults(filtered.length > 0 ? filtered : inventory.slice(0, 3))
+    } catch (err) {
+      console.error('Search failed:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <div className="bg-white border border-green-100 rounded-3xl p-6 shadow-lg w-full max-w-lg">
+    <div className="bg-white border border-green-100 rounded-3xl p-6 shadow-xl w-full max-w-lg">
       <div className="flex items-center gap-2 mb-5">
-        <Search className="w-5 h-5 text-green-600" />
-        <h3 className="font-display font-bold text-gray-900">Find Farmers Near You</h3>
+        <div className="w-8 h-8 rounded-xl bg-green-100 text-green-700 flex items-center justify-center">
+          <Search className="w-4 h-4" />
+        </div>
+        <div>
+          <h3 className="font-display font-bold text-gray-900 text-base">Direct Farmer Sourcing Radar</h3>
+          <p className="text-gray-400 text-xs">Find verified farmgate crop batches near your warehouse</p>
+        </div>
       </div>
 
       <div className="space-y-3 mb-4">
         <div>
-          <label className="text-gray-500 text-xs mb-1 block font-medium">Crop Required</label>
+          <label className="text-gray-600 text-xs mb-1 block font-semibold">Crop Required</label>
           <select value={search.crop} onChange={e => setSearch(s => ({ ...s, crop: e.target.value }))}
-            className="w-full px-4 py-3 rounded-xl bg-green-50 border border-green-200
-                       text-gray-800 text-sm focus:outline-none focus:border-green-500">
+            className="w-full px-4 py-3 rounded-xl bg-green-50/60 border border-green-200
+                       text-gray-800 text-sm font-semibold focus:outline-none focus:border-green-500">
             <option value="">Select crop...</option>
-            {['Onion','Wheat','Rice','Tomato','Potato','Maize','Soybean'].map(c => <option key={c}>{c}</option>)}
+            {['Onion (Nashik Red)','Wheat (Sharbati)','Tomato (Hybrid)','Potato','Maize','Soybean'].map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-gray-500 text-xs mb-1 block font-medium">Min Quantity (qtl)</label>
+            <label className="text-gray-600 text-xs mb-1 block font-semibold">Required Qty (Qtl)</label>
             <input type="number" placeholder="e.g. 500" value={search.qty}
               onChange={e => setSearch(s => ({ ...s, qty: e.target.value }))}
-              className="w-full px-4 py-3 rounded-xl bg-green-50 border border-green-200
-                         text-gray-900 text-sm focus:outline-none focus:border-green-500" />
+              className="w-full px-4 py-3 rounded-xl bg-green-50/60 border border-green-200
+                         text-gray-900 text-sm font-semibold focus:outline-none focus:border-green-500" />
           </div>
           <div>
-            <label className="text-gray-500 text-xs mb-1 block font-medium">Max Distance (km)</label>
+            <label className="text-gray-600 text-xs mb-1 block font-semibold">Max Distance (km)</label>
             <select value={search.maxDist} onChange={e => setSearch(s => ({ ...s, maxDist: e.target.value }))}
-              className="w-full px-4 py-3 rounded-xl bg-green-50 border border-green-200
-                         text-gray-800 text-sm focus:outline-none">
-              {['25','50','100','200','Any'].map(d => <option key={d}>{d}</option>)}
+              className="w-full px-4 py-3 rounded-xl bg-green-50/60 border border-green-200
+                         text-gray-800 text-sm font-semibold focus:outline-none">
+              {['25','50','100','200'].map(d => <option key={d}>{d} km</option>)}
             </select>
           </div>
         </div>
         <div>
-          <label className="text-gray-500 text-xs mb-1 block font-medium">Your Location</label>
+          <label className="text-gray-600 text-xs mb-1 block font-semibold">Delivery Warehouse Location</label>
           <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-            <input type="text" placeholder="City / district / pincode" value={search.location}
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-600" />
+            <input type="text" placeholder="City / district / industrial estate" value={search.location}
               onChange={e => setSearch(s => ({ ...s, location: e.target.value }))}
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-green-50 border border-green-200
-                         text-gray-900 text-sm focus:outline-none focus:border-green-500" />
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-green-50/60 border border-green-200
+                         text-gray-900 text-sm font-medium focus:outline-none focus:border-green-500" />
           </div>
         </div>
       </div>
 
-      <button onClick={() => setSearched(true)}
-        className="w-full btn-primary py-3 flex items-center justify-center gap-2">
-        <Search className="w-4 h-4" /> Find Farmers
+      <button onClick={handleSearch} disabled={loading}
+        className="w-full btn-primary py-3 flex items-center justify-center gap-2 font-bold shadow-md hover:shadow-lg">
+        {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+        <span>Scan Farm Batches</span>
       </button>
 
       {searched && (
         <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }} className="mt-4 space-y-3">
-          <p className="text-green-600 text-xs font-semibold">✅ {mockResults.length} farmers found matching your criteria</p>
-          {mockResults.map((r, i) => (
-            <div key={i}
-              className="bg-green-50 border border-green-100 rounded-2xl p-4 hover:bg-green-100/60
-                         transition-colors cursor-pointer group">
+          <p className="text-green-700 text-xs font-bold flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            {results.length} verified farmer batches found within {search.maxDist}
+          </p>
+          {results.map((r, i) => (
+            <div key={r.id || i}
+              className="bg-green-50/70 border border-green-100 rounded-2xl p-4 hover:bg-green-100/60
+                         transition-all cursor-pointer group shadow-xs">
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-900 text-sm">{r.name}</p>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                      r.badge === 'TOP SELLER' ? 'bg-amber-100 text-amber-700' :
-                      r.badge === 'TRUSTED'    ? 'bg-green-100 text-green-700'  :
-                                                  'bg-sky-100 text-sky-700'
-                    }`}>{r.badge}</span>
+                    <p className="font-bold text-gray-900 text-sm">{r.farmerName || 'Farmer Batch'}</p>
+                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      {r.qualityGrade || 'GRADE A'}
+                    </span>
                   </div>
-                  <p className="text-gray-400 text-xs mt-0.5">{r.qty} · {r.dist} away</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{r.crop} · {r.quantity} {r.unit} available</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-green-700 text-sm">{r.price}</p>
-                  <div className="flex items-center gap-1 justify-end mt-0.5">
-                    <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    <span className="text-gray-500 text-xs">{r.rating} ({r.history} txns)</span>
-                  </div>
+                  <p className="font-extrabold text-green-700 text-sm">₹{r.expectedPrice}/qtl</p>
+                  <p className="text-gray-400 text-[11px]">{r.location?.split(',')[0] || 'Nashik'}</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between text-[10px]">
-                {r.verified
-                  ? <span className="text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />VERIFIED SELLER</span>
-                  : <span className="text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />SELF-REPORTED</span>}
-                <button className="text-green-600 group-hover:text-green-800 flex items-center gap-1 font-semibold">
-                  View Profile <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                </button>
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-green-100">
+                <span className="text-emerald-700 text-[10px] font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> DIRECT FARMGATE
+                </span>
+                <a href="#command-center" className="text-green-700 group-hover:text-green-900 flex items-center gap-1 font-bold text-xs">
+                  <span>Propose Order</span>
+                  <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                </a>
               </div>
             </div>
           ))}
@@ -323,14 +345,14 @@ export default function Buyer() {
 
             <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
               transition={{ duration:0.6, delay:0.6 }} className="flex flex-wrap gap-4">
-              <a href="#search" className="flex items-center gap-2 px-8 py-4 rounded-full
+              <a href="#command-center" className="flex items-center gap-2 px-8 py-4 rounded-full
                                            font-semibold bg-green-700 text-white shadow-md
                                            hover:bg-green-600 hover:-translate-y-0.5 transition-all group">
-                🛒 Find Farmers Now
+                🏢 Open Buyer Sourcing Hub
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </a>
-              <a href="#pricing" className="btn-outline flex items-center gap-2">
-                💼 View Pricing
+              <a href="#search" className="btn-outline flex items-center gap-2">
+                🌾 Search Farm Batches
               </a>
             </motion.div>
           </div>
@@ -347,6 +369,24 @@ export default function Buyer() {
           <div className="relative h-24 opacity-35"><GrassStrip density={55}  heightMin={28} heightMax={90} /></div>
           <div className="relative h-18 -mt-10 opacity-65"><GrassStrip density={80}  heightMin={22} heightMax={70} /></div>
           <div className="relative h-14 -mt-7"><GrassStrip density={110} heightMin={16} heightMax={55} /></div>
+        </div>
+      </section>
+
+      {/* ── FASALSETHU BUYER SOURCING & REQUIREMENTS COMMAND CENTER ── */}
+      <section id="command-center" className="py-20 bg-green-50/50 relative overflow-hidden">
+        <FloatingParticles count={14} />
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <span className="text-xs font-extrabold uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">
+              FasalSethu B2 Buyer Sourcing Engine
+            </span>
+            <h2 className="section-title text-gradient mt-2">Buyer Procurement Command Center</h2>
+            <p className="section-subtitle">
+              Manage your active crop sourcing requirements, receive and negotiate incoming direct farmer offers, scan verified batches on the matching radar, and calculate landed savings.
+            </p>
+          </div>
+
+          <BuyerDashboard />
         </div>
       </section>
 
