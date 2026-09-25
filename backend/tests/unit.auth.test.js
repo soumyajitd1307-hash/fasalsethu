@@ -145,6 +145,69 @@ describe('JWT authentication (local JWKS)', () => {
   });
 });
 
+describe('collection scope is derived only from the verified identity', () => {
+  // Pure helpers: no database, no HTTP. These pin the mapping from a verified
+  // JWT identity to the deals a collection read may expose.
+  // Required lazily inside the tests: the top-level before() applies the test
+  // Auth0 env first, and config/env must not be cached before that.
+  function helpers() {
+    return require('../src/middleware/auth');
+  }
+
+  test('11. a farmer is scoped to farmer-owned deals, a buyer to buyer-owned deals', () => {
+    const { dealScopeFor } = helpers();
+    assert.deepEqual(dealScopeFor({ id: 'F1', role: 'farmer' }), { farmerId: 'F1' });
+    assert.deepEqual(dealScopeFor({ id: 'B1', role: 'buyer' }), { buyerId: 'B1' });
+  });
+
+  test('12. the scope can never be widened by the request', () => {
+    const { dealScopeFor } = helpers();
+    // A farmer is not a buyer: no buyerId filter is theirs to use.
+    assert.equal(dealScopeFor({ id: 'F1', role: 'farmer' }).buyerId, undefined);
+    assert.equal(dealScopeFor({ id: 'B1', role: 'buyer' }).farmerId, undefined);
+  });
+
+  test('13. admin/system are the only cross-participant roles (documented)', () => {
+    const { dealScopeFor, isPrivileged } = helpers();
+    assert.equal(isPrivileged({ id: 'A1', role: 'admin' }), true);
+    assert.equal(isPrivileged({ id: 'S1', role: 'system' }), true);
+    assert.equal(dealScopeFor({ id: 'A1', role: 'admin' }), null);
+    assert.equal(dealScopeFor({ id: 'S1', role: 'system' }), null);
+    assert.equal(isPrivileged({ id: 'F1', role: 'farmer' }), false);
+    assert.equal(isPrivileged({ id: 'U1', role: 'user' }), false);
+  });
+
+  test('14. any other role is refused, and a missing identity is 401', () => {
+    const { dealScopeFor, AuthError } = helpers();
+    assert.throws(() => dealScopeFor({ id: 'U1', role: 'user' }), (err) => {
+      assert.ok(err instanceof AuthError);
+      assert.equal(err.status, 403);
+      return true;
+    });
+    assert.throws(() => dealScopeFor(null), (err) => {
+      assert.equal(err.status, 401);
+      return true;
+    });
+    assert.throws(() => dealScopeFor({ role: 'farmer' }), (err) => {
+      assert.equal(err.status, 401);
+      return true;
+    });
+  });
+
+  test('15. identity comes from verified claims only, not from header-shaped fields', () => {
+    const { dealScopeFor } = helpers();
+    // Even if a claims object somehow carried header-like fields, the scope is
+    // computed from the verified id/role alone.
+    const scope = dealScopeFor({
+      id: 'F1',
+      role: 'farmer',
+      'x-user-id': 'F2',
+      'x-user-role': 'admin',
+    });
+    assert.deepEqual(scope, { farmerId: 'F1' });
+  });
+});
+
 describe('deal authorization with verified identity', { skip: SKIP_DB }, () => {
   async function makeParties(tag) {
     const farmerService = require('../src/services/farmerService');

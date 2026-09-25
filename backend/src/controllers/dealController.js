@@ -22,7 +22,9 @@ async function create(req, res, next) {
 
 async function list(req, res, next) {
   try {
-    const result = await dealService.getAllDeals(req.query);
+    // req.user comes from the verified JWT (requireAuth). The service scopes
+    // the result set to that identity, so no filter can widen it.
+    const result = await dealService.getAllDeals(req.query, req.user);
     return res.json({
       success: true,
       data: result.data,
@@ -51,7 +53,7 @@ async function getById(req, res, next) {
 async function getFarmerDeals(req, res, next) {
   try {
     const farmerId = req.params.farmerId;
-    const result = await dealService.getFarmerDeals(farmerId, req.query);
+    const result = await dealService.getFarmerDeals(farmerId, req.query, req.user);
     return res.json({
       success: true,
       data: result.data,
@@ -65,7 +67,7 @@ async function getFarmerDeals(req, res, next) {
 async function getBuyerDeals(req, res, next) {
   try {
     const buyerId = req.params.buyerId;
-    const result = await dealService.getBuyerDeals(buyerId, req.query);
+    const result = await dealService.getBuyerDeals(buyerId, req.query, req.user);
     return res.json({
       success: true,
       data: result.data,
@@ -110,8 +112,10 @@ async function cancel(req, res, next) {
 
 async function getSummary(req, res, next) {
   try {
+    // Any farmerId/buyerId here is only honoured when it matches the caller's
+    // own verified identity; otherwise the service answers 403.
     const { farmerId, buyerId } = req.query;
-    const summary = await dealService.getDealsSummary({ farmerId, buyerId });
+    const summary = await dealService.getDealsSummary({ farmerId, buyerId }, req.user);
     return res.json({
       success: true,
       data: summary,

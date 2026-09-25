@@ -74,6 +74,19 @@ function unauthorized(message) {
   return new AuthError(message || 'Unauthorized: missing or invalid credentials', 401);
 }
 
+function forbidden(message) {
+  return new AuthError(message || 'Forbidden', 403);
+}
+
+// Roles that are allowed to read across participants. They are the ONLY
+// exception to owner scoping, and they are intentionally explicit: a farmer or
+// buyer can never widen their own scope, whatever the request asks for.
+const PRIVILEGED_ROLES = new Set(['admin', 'system']);
+
+function isPrivileged(user) {
+  return Boolean(user && user.id && PRIVILEGED_ROLES.has(user.role));
+}
+
 /**
  * Strict authentication gate for protected routes.
  */
@@ -105,27 +118,32 @@ async function requireAuth(req, res, next) {
 /**
  * Ensures user is authorized to access a specific farmer or buyer's deal history.
  * Prevents unauthorized users from viewing another user's transactions.
+ *
+ * The check is role-agnostic on purpose: a token may only read the history of
+ * the participant type it claims. A buyer token is therefore refused farmer
+ * history (and vice versa), and any other role is refused both.
  */
 function authorizeDealAccess(req, res, next) {
   const user = req.user;
-  // If unauthenticated and auth is strictly enforced
   if (!user || !user.id) {
-    const err = new AuthError('Authentication required to access deal transactions.');
+    const err = new AuthError('Authentication required to access deal transactions.', 401);
     return next(err);
   }
+
+  if (isPrivileged(user)) return next();
 
   const farmerId = req.params.farmerId;
   const buyerId = req.params.buyerId;
 
   // Farmers can only view their own deals
-  if (farmerId && user.role === 'farmer' && user.id !== farmerId) {
-    const err = new AuthError(`Access denied: you cannot view deals belonging to farmer '${farmerId}'`, 403);
+  if (farmerId && !(user.role === 'farmer' && user.id === farmerId)) {
+    const err = forbidden(`Access denied: you cannot view deals belonging to farmer '${farmerId}'`);
     return next(err);
   }
 
   // Buyers can only view their own purchases
-  if (buyerId && user.role === 'buyer' && user.id !== buyerId) {
-    const err = new AuthError(`Access denied: you cannot view deals belonging to buyer '${buyerId}'`, 403);
+  if (buyerId && !(user.role === 'buyer' && user.id === buyerId)) {
+    const err = forbidden(`Access denied: you cannot view deals belonging to buyer '${buyerId}'`);
     return next(err);
   }
 
@@ -133,16 +151,40 @@ function authorizeDealAccess(req, res, next) {
 }
 
 /**
+ * Single source of truth mapping a verified identity to the deals it may see
+ * in COLLECTION endpoints (list, summary). Identity is taken exclusively from
+ * the verified JWT `sub` established by requireAuth — never from query, body
+ * or client headers.
+ *
+ * @returns {{farmerId: string}|{buyerId: string}|null} owner filter, or null for
+ *   privileged roles (admin/system), which may read across participants.
+ * @throws {AuthError} 401 when there is no verified identity, 403 when the
+ *   role has no business reading deal data at all.
+ */
+function dealScopeFor(user) {
+  if (!user || !user.id) {
+    throw new AuthError('Authentication required to access deal data', 401);
+  }
+  if (isPrivileged(user)) return null;
+  if (user.role === 'farmer') return { farmerId: user.id };
+  if (user.role === 'buyer') return { buyerId: user.id };
+  throw forbidden(`Access denied: role '${user.role}' may not access deal data`);
+}
+
+/**
  * Ensures user is authorized to view or mutate a deal.
  * Used on GET /deals/:id, PATCH /deals/:id/status, PATCH /deals/:id/cancel
  */
 function authorizeDealParticipant(deal, user) {
-  if (!user || !user.id) return; // If unauthenticated in non-strict mode
-  if (user.role === 'admin' || user.role === 'system') return; // Admins allowed
+  // No verified identity means no access at all: never fall open.
+  if (!user || !user.id) {
+    throw new AuthError('Authentication required to access this deal', 401);
+  }
+  if (isPrivileged(user)) return; // Admins allowed
 
   const isParticipant = deal.farmerId === user.id || deal.buyerId === user.id;
   if (!isParticipant) {
-    const err = new AuthError(`Access denied: you are neither the farmer nor the buyer for deal '${deal.id}'`, 403);
+    const err = forbidden(`Access denied: you are neither the farmer nor the buyer for deal '${deal.id}'`);
     throw err;
   }
 }
@@ -152,6 +194,8 @@ module.exports = {
   requireAuth,
   authorizeDealAccess,
   authorizeDealParticipant,
+  dealScopeFor,
+  isPrivileged,
   extractToken,
   verifyToken,
 };

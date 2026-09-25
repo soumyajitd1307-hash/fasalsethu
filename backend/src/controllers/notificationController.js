@@ -67,6 +67,12 @@ async function markRead(req, res, next) {
   try {
     // requireAuth guarantees req.user; never fall back to client headers.
     const userId = req.user && req.user.id;
+    if (!userId) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Authentication required to mark notifications as read',
+      });
+    }
     const notification = await notificationService.markAsRead(req.params.id, userId);
 
     return res.json({

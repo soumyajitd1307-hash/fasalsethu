@@ -128,6 +128,24 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
     return { status: res.status, json };
   }
 
+  // Creates a persisted deal between two fresh parties, for authorization tests.
+  async function seedDeal(tag, { quantity = 100, price = 20, cropName = 'Rice' } = {}) {
+    const { farmerId, buyerId } = await makeParties(tag);
+    const offerId = `OFFER-${tag}-${TS}`;
+    __setTestOffer({
+      offerId,
+      farmerId,
+      buyerId,
+      cropName,
+      quantity,
+      offeredPrice: price,
+      status: 'ACCEPTED',
+    });
+    const res = await api('POST', '/api/deals', { offerId }, await anyAuthHeaders());
+    assert.equal(res.status, 201, `seed deal ${tag} must be created`);
+    return { farmerId, buyerId, offerId, dealId: res.json.data.id };
+  }
+
   function assertNoLeak(json, label) {
     assert.ok(json && typeof json === 'object', `${label}: expected JSON body`);
     assert.ok(!('code' in json), `${label}: leaked Prisma error code`);
@@ -543,6 +561,220 @@ describe('B3 Deal & Notification API Integration Tests', { skip: SKIP_DB }, () =
       const { getPrisma } = require('../src/config/database');
       const stored = await getPrisma().deal.findUnique({ where: { offerId } });
       assert.equal(stored, null, 'no deal row may be created without a real offer');
+    });
+  });
+
+  // Collection-level authorization: identity comes only from the verified JWT
+  // `sub`, and an authenticated user must never read another user's deal list,
+  // deal aggregates, or notifications.
+  describe('collection authorization (owner scoping)', () => {
+    test('20. GET /api/deals returns only the calling farmer\'s own deals', async () => {
+      const mine = await seedDeal('C20A');
+      const other = await seedDeal('C20B');
+
+      const res = await api('GET', '/api/deals?limit=100', null, await authHeaders(mine.farmerId, 'farmer'));
+
+      assert.equal(res.status, 200);
+      const ids = res.json.data.map((d) => d.id);
+      assert.ok(ids.includes(mine.dealId), 'own deal must be listed');
+      assert.ok(!ids.includes(other.dealId), "another farmer's deal must not be listed");
+      for (const deal of res.json.data) {
+        assert.equal(deal.farmerId, mine.farmerId, 'no row from another farmer may appear');
+      }
+      assert.equal(res.json.pagination.total, 1, 'count must not include other farmers');
+    });
+
+    test('21. GET /api/deals returns only the calling buyer\'s own deals', async () => {
+      const mine = await seedDeal('C21A');
+      const other = await seedDeal('C21B');
+
+      const res = await api('GET', '/api/deals?limit=100', null, await authHeaders(mine.buyerId, 'buyer'));
+
+      assert.equal(res.status, 200);
+      const ids = res.json.data.map((d) => d.id);
+      assert.ok(ids.includes(mine.dealId), 'own deal must be listed');
+      assert.ok(!ids.includes(other.dealId), "another buyer's deal must not be listed");
+      for (const deal of res.json.data) {
+        assert.equal(deal.buyerId, mine.buyerId, 'no row from another buyer may appear');
+      }
+      assert.equal(res.json.pagination.total, 1, 'count must not include other buyers');
+    });
+
+    test('22. a farmer cannot filter the deal list by another farmerId -> 403', async () => {
+      const mine = await seedDeal('C22A');
+      const other = await seedDeal('C22B');
+
+      const res = await api(
+        'GET',
+        `/api/deals?farmerId=${other.farmerId}`,
+        null,
+        await authHeaders(mine.farmerId, 'farmer')
+      );
+
+      assert.equal(res.status, 403);
+      assert.match(res.json.message, /Access denied/);
+      assert.equal(res.json.data, undefined, 'no deal data may be disclosed');
+    });
+
+    test('23. a buyer cannot filter the deal list by another buyerId -> 403', async () => {
+      const mine = await seedDeal('C23A');
+      const other = await seedDeal('C23B');
+
+      const otherBuyer = await api(
+        'GET',
+        `/api/deals?buyerId=${other.buyerId}`,
+        null,
+        await authHeaders(mine.buyerId, 'buyer')
+      );
+      assert.equal(otherBuyer.status, 403);
+      assert.match(otherBuyer.json.message, /Access denied/);
+
+      // A farmer is not a buyer at all, so the buyerId filter is never theirs
+      // to use — not even pointing at their own id.
+      const farmerUsingBuyerFilter = await api(
+        'GET',
+        `/api/deals?buyerId=${mine.farmerId}`,
+        null,
+        await authHeaders(mine.farmerId, 'farmer')
+      );
+      assert.equal(farmerUsingBuyerFilter.status, 403);
+      assert.match(farmerUsingBuyerFilter.json.message, /Access denied/);
+    });
+
+    test('24. GET /api/deals/summary for another participant -> 403', async () => {
+      const mine = await seedDeal('C24A');
+      const other = await seedDeal('C24B');
+
+      const res = await api(
+        'GET',
+        `/api/deals/summary?farmerId=${other.farmerId}`,
+        null,
+        await authHeaders(mine.farmerId, 'farmer')
+      );
+
+      assert.equal(res.status, 403);
+      assert.match(res.json.message, /Access denied/);
+      assert.equal(res.json.data, undefined, "no aggregate may be disclosed for another farmer");
+    });
+
+    test('25. GET /api/deals/summary with no filter aggregates only the caller\'s deals', async () => {
+      const mine = await seedDeal('C25A');
+      await seedDeal('C25B');
+
+      const own = await api('GET', '/api/deals/summary', null, await authHeaders(mine.farmerId, 'farmer'));
+      assert.equal(own.status, 200);
+      assert.equal(own.json.data.totalDeals, 1, 'summary must not aggregate the whole platform');
+
+      const ownBuyer = await api('GET', '/api/deals/summary', null, await authHeaders(mine.buyerId, 'buyer'));
+      assert.equal(ownBuyer.status, 200);
+      assert.equal(ownBuyer.json.data.totalDeals, 1);
+
+      // Sanity check that an unscoped read really would have been larger: the
+      // documented privileged role still sees every deal.
+      const privileged = await api('GET', '/api/deals/summary', null, await authHeaders('admin-tester', 'admin'));
+      assert.equal(privileged.status, 200);
+      assert.ok(privileged.json.data.totalDeals > 1, 'admin summary spans all deals');
+    });
+
+    test('26. cross-role history reads are denied in both directions', async () => {
+      const target = await seedDeal('C26');
+
+      const buyerReadingFarmer = await api(
+        'GET',
+        `/api/deals/farmer/${target.farmerId}`,
+        null,
+        await authHeaders('unrelated-buyer', 'buyer')
+      );
+      assert.equal(buyerReadingFarmer.status, 403);
+      assert.match(buyerReadingFarmer.json.message, /Access denied/);
+
+      const farmerReadingBuyer = await api(
+        'GET',
+        `/api/deals/buyer/${target.buyerId}`,
+        null,
+        await authHeaders('unrelated-farmer', 'farmer')
+      );
+      assert.equal(farmerReadingBuyer.status, 403);
+      assert.match(farmerReadingBuyer.json.message, /Access denied/);
+    });
+
+    test('27. notification list and unread count expose only the caller\'s rows', async () => {
+      const mine = await seedDeal('C27A');
+      const other = await seedDeal('C27B');
+
+      const list = await api('GET', '/api/notifications?limit=100', null, await authHeaders(mine.farmerId, 'farmer'));
+      assert.equal(list.status, 200);
+      assert.ok(list.json.data.length >= 1);
+      for (const n of list.json.data) {
+        assert.equal(n.userId, mine.farmerId, 'no other user\'s notification may be listed');
+      }
+
+      const otherList = await api('GET', '/api/notifications', null, await authHeaders(other.farmerId, 'farmer'));
+      const otherIds = otherList.json.data.map((n) => n.id);
+      const myIds = list.json.data.map((n) => n.id);
+      for (const id of otherIds) {
+        assert.ok(!myIds.includes(id), "another farmer's notification id must not be reachable");
+      }
+
+      const unread = await api('GET', '/api/notifications/unread', null, await authHeaders(mine.farmerId, 'farmer'));
+      assert.equal(unread.status, 200);
+      assert.equal(unread.json.unreadCount, 1, 'unread count must be per-user, not platform-wide');
+      for (const n of unread.json.data) {
+        assert.equal(n.userId, mine.farmerId);
+      }
+    });
+
+    test('28. a user cannot mark another user\'s notification as read -> 403', async () => {
+      const other = await seedDeal('C28');
+      const otherList = await api('GET', '/api/notifications', null, await authHeaders(other.farmerId, 'farmer'));
+      const notifId = otherList.json.data[0].id;
+
+      const res = await api(
+        'PATCH',
+        `/api/notifications/${notifId}/read`,
+        null,
+        await authHeaders('unrelated-farmer', 'farmer')
+      );
+      assert.equal(res.status, 403);
+      assert.match(res.json.message, /cannot modify another user/);
+
+      const recheck = await api('GET', '/api/notifications', null, await authHeaders(other.farmerId, 'farmer'));
+      const row = recheck.json.data.find((n) => n.id === notifId);
+      assert.equal(row.read, false, 'the notification must remain unread');
+    });
+
+    test('29. a token that is neither farmer nor buyer cannot read deal collections -> 403', async () => {
+      const token = await authHeaders('plain-user', 'user');
+
+      const list = await api('GET', '/api/deals', null, token);
+      assert.equal(list.status, 403);
+      assert.match(list.json.message, /Access denied/);
+
+      const summary = await api('GET', '/api/deals/summary', null, token);
+      assert.equal(summary.status, 403);
+      assert.match(summary.json.message, /Access denied/);
+    });
+
+    test('30. admin keeps documented cross-participant read access', async () => {
+      const mine = await seedDeal('C30A');
+      const other = await seedDeal('C30B');
+
+      const all = await api('GET', '/api/deals?limit=100', null, await authHeaders('admin-tester', 'admin'));
+      assert.equal(all.status, 200);
+      const ids = all.json.data.map((d) => d.id);
+      assert.ok(ids.includes(mine.dealId), 'admin sees the first deal');
+      assert.ok(ids.includes(other.dealId), 'admin sees the second deal');
+
+      const narrowed = await api(
+        'GET',
+        `/api/deals?farmerId=${other.farmerId}&limit=100`,
+        null,
+        await authHeaders('admin-tester', 'admin')
+      );
+      assert.equal(narrowed.status, 200);
+      for (const d of narrowed.json.data) {
+        assert.equal(d.farmerId, other.farmerId, 'admin may still narrow with an explicit filter');
+      }
     });
   });
 });

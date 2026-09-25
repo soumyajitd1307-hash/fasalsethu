@@ -17,6 +17,7 @@
 const { getPrisma } = require('../config/database');
 const { getAcceptedOffer } = require('./offerAdapter');
 const { createNotification } = require('./notificationService');
+const { dealScopeFor } = require('../middleware/auth');
 
 // State machine definition
 const ALLOWED_TRANSITIONS = {
@@ -43,6 +44,49 @@ function badRequest(msg) {
   const err = new Error(msg);
   err.status = 400;
   return err;
+}
+
+function forbidden(msg) {
+  const err = new Error(msg);
+  err.status = 403;
+  return err;
+}
+
+/**
+ * Resolves the owner filter a caller is allowed to read, and refuses any
+ * attempt to widen it.
+ *
+ * Every collection read (list, summary, per-participant history) goes through
+ * here, so ownership is enforced in the data layer and not only in a route
+ * middleware. The filter is derived exclusively from the verified identity
+ * (`actorUser`, populated from the JWT `sub` by requireAuth). Client-supplied
+ * farmerId/buyerId can at most repeat the caller's own identity; asking for
+ * anybody else is a 403 rather than a silently ignored parameter.
+ *
+ * @param {Object} actorUser - verified identity (JWT `sub`); required
+ * @param {{farmerId?: string, buyerId?: string}} [requested] - client filters
+ * @returns {{farmerId?: string, buyerId?: string}} owner filter; empty
+ *   for privileged roles (admin/system), which may read across participants.
+ */
+function resolveOwnerFilter(actorUser, requested = {}) {
+  const scope = dealScopeFor(actorUser);
+
+  // Documented privileged path: admins/system keep unrestricted read access
+  // and may still narrow it with explicit filters.
+  if (!scope) {
+    const privileged = {};
+    if (requested.farmerId) privileged.farmerId = requested.farmerId;
+    if (requested.buyerId) privileged.buyerId = requested.buyerId;
+    return privileged;
+  }
+
+  if (requested.farmerId && requested.farmerId !== scope.farmerId) {
+    throw forbidden("Access denied: you cannot read another farmer's deals");
+  }
+  if (requested.buyerId && requested.buyerId !== scope.buyerId) {
+    throw forbidden("Access denied: you cannot read another buyer's deals");
+  }
+  return { ...scope };
 }
 
 function dbNotConfigured() {
@@ -362,11 +406,18 @@ async function cancelDeal(id, reason = null, actorUser = null) {
 
 /**
  * Retrieves deals for a farmer with pagination and optional status filter.
+ * Owner-enforced: a non-privileged caller may only read their own history.
  * @param {string} farmerId
  * @param {Object} query
+ * @param {Object} [actorUser] - verified identity (JWT `sub`); required —
+ *   omitting it is a 401, so there is no unscoped read path
  */
-async function getFarmerDeals(farmerId, query = {}) {
+async function getFarmerDeals(farmerId, query = {}, actorUser = null) {
   if (!farmerId) throw badRequest('farmerId is required');
+  const scope = dealScopeFor(actorUser);
+  if (scope && scope.farmerId !== farmerId) {
+    throw forbidden("Access denied: you cannot read another farmer's deals");
+  }
   const page = Number(query.page) || 1;
   const limit = Number(query.limit) || 20;
   const status = query.status ? query.status.toUpperCase() : undefined;
@@ -398,11 +449,18 @@ async function getFarmerDeals(farmerId, query = {}) {
 
 /**
  * Retrieves deals for a buyer with pagination and optional status filter.
+ * Owner-enforced: a non-privileged caller may only read their own history.
  * @param {string} buyerId
  * @param {Object} query
+ * @param {Object} [actorUser] - verified identity (JWT `sub`); required —
+ *   omitting it is a 401, so there is no unscoped read path
  */
-async function getBuyerDeals(buyerId, query = {}) {
+async function getBuyerDeals(buyerId, query = {}, actorUser = null) {
   if (!buyerId) throw badRequest('buyerId is required');
+  const scope = dealScopeFor(actorUser);
+  if (scope && scope.buyerId !== buyerId) {
+    throw forbidden("Access denied: you cannot read another buyer's deals");
+  }
   const page = Number(query.page) || 1;
   const limit = Number(query.limit) || 20;
   const status = query.status ? query.status.toUpperCase() : undefined;
@@ -433,22 +491,26 @@ async function getBuyerDeals(buyerId, query = {}) {
 }
 
 /**
- * Lists all deals with optional filters.
+ * Lists deals visible to the caller, with optional filters.
+ *
+ * This is a COLLECTION read, so it is always owner-scoped: a farmer sees
+ * deals where they are the farmer, a buyer sees deals where they are the
+ * buyer, and nobody sees the whole book of business by default. Any
+ * farmerId/buyerId filter must match the caller's own identity unless the
+ * caller is a privileged role.
+ *
  * @param {Object} query
+ * @param {Object} [actorUser] - verified identity (JWT `sub`); required
  */
-async function getAllDeals(query = {}) {
+async function getAllDeals(query = {}, actorUser = null) {
   const page = Number(query.page) || 1;
   const limit = Number(query.limit) || 20;
   const status = query.status ? query.status.toUpperCase() : undefined;
-  const farmerId = query.farmerId;
-  const buyerId = query.buyerId;
   const skip = (page - 1) * limit;
 
   const prisma = clientOrThrow();
-  const where = {};
+  const where = resolveOwnerFilter(actorUser, query);
   if (status) where.status = status;
-  if (farmerId) where.farmerId = farmerId;
-  if (buyerId) where.buyerId = buyerId;
 
   const [rows, total] = await prisma.$transaction([
     prisma.deal.findMany({
@@ -472,14 +534,19 @@ async function getAllDeals(query = {}) {
 }
 
 /**
- * Calculates aggregated transaction summary stats for a participant.
+ * Calculates aggregated transaction summary stats for the caller.
+ *
+ * Owner-scoped in the same way as getAllDeals: with no farmerId/buyerId the
+ * aggregate covers the caller's own deals only (never the whole platform),
+ * and a filter naming another participant is rejected with 403.
+ *
+ * @param {{farmerId?: string, buyerId?: string}} [params]
+ * @param {Object} [actorUser] - verified identity (JWT `sub`); required
  */
-async function getDealsSummary({ farmerId, buyerId } = {}) {
-  const filter = {};
-  if (farmerId) filter.farmerId = farmerId;
-  if (buyerId) filter.buyerId = buyerId;
+async function getDealsSummary({ farmerId, buyerId } = {}, actorUser = null) {
+  const ownerFilter = resolveOwnerFilter(actorUser, { farmerId, buyerId });
 
-  const allDeals = await getAllDeals({ ...filter, limit: 1000 });
+  const allDeals = await getAllDeals({ ...ownerFilter, limit: 1000 }, actorUser);
   const deals = allDeals.data;
 
   const totalDeals = deals.length;

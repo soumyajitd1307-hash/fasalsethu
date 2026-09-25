@@ -18,15 +18,17 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-// Summary endpoint
+// Summary endpoint — owner-scoped to the verified JWT identity.
 // GET /api/deals/summary?farmerId=... or ?buyerId=...
-router.get('/summary', dealController.getSummary);
+// A filter naming another participant is rejected with 403; with no filter the
+// aggregate covers the caller's own deals only.
+router.get('/summary', validateQuery(dealQuerySchema), dealController.getSummary);
 
-// Farmer deal history
+// Farmer deal history — owner only (authorizeDealAccess is role-agnostic).
 // GET /api/deals/farmer/:farmerId
 router.get('/farmer/:farmerId', authorizeDealAccess, validateQuery(dealQuerySchema), dealController.getFarmerDeals);
 
-// Buyer deal history
+// Buyer deal history — owner only (authorizeDealAccess is role-agnostic).
 // GET /api/deals/buyer/:buyerId
 router.get('/buyer/:buyerId', authorizeDealAccess, validateQuery(dealQuerySchema), dealController.getBuyerDeals);
 
@@ -34,7 +36,8 @@ router.get('/buyer/:buyerId', authorizeDealAccess, validateQuery(dealQuerySchema
 // POST /api/deals
 router.post('/', validateBody(dealCreateSchema), dealController.create);
 
-// GET /api/deals
+// GET /api/deals — collection read, scoped to the caller (farmer-owned or
+// buyer-owned deals). Never returns the whole book of business.
 router.get('/', validateQuery(dealQuerySchema), dealController.list);
 
 // GET /api/deals/:id

@@ -346,7 +346,12 @@ describe('B3 Deal Service Unit Tests', { skip: SKIP_DB }, () => {
     await dealService.updateDealStatus(d1.id, 'IN_PROGRESS');
     await dealService.updateDealStatus(d1.id, 'COMPLETED');
 
-    const summary = await dealService.getDealsSummary({ farmerId });
+    // Collection reads are owner-scoped, so the summary is requested as the
+    // verified owner of these deals.
+    const summary = await dealService.getDealsSummary(
+      { farmerId },
+      { id: farmerId, role: 'farmer' }
+    );
     assert.equal(summary.totalDeals, 2);
     assert.equal(summary.completedDeals, 1);
     assert.equal(summary.activeDeals, 1);

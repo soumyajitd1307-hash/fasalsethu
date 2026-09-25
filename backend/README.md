@@ -314,15 +314,39 @@ Deals and in-app notifications are implemented and PostgreSQL-only (no in-memory
 | Method | Endpoint | Notes |
 |---|---|---|
 | `POST` | `/api/deals` | `201`; body `{ offerId, pickupLocation?, deliveryLocation? }`; one deal per offer (`409` on duplicate) |
-| `GET` | `/api/deals?status=&farmerId=&buyerId=&page=&limit=` | `200 { success, data, pagination }` |
-| `GET` | `/api/deals/summary?farmerId=…` or `?buyerId=…` | aggregated counts/volume/settled value |
-| `GET` | `/api/deals/farmer/:farmerId`, `/api/deals/buyer/:buyerId` | participant history, paginated |
+| `GET` | `/api/deals?status=&page=&limit=` | `200 { success, data, pagination }` — the caller's own deals only (see Authorization below) |
+| `GET` | `/api/deals/summary` | aggregated counts/volume/settled value for the caller's own deals; optional `?farmerId=`/`?buyerId=` must match the caller |
+| `GET` | `/api/deals/farmer/:farmerId`, `/api/deals/buyer/:buyerId` | participant history, paginated; owner only |
 | `GET` | `/api/deals/:id` | `200`; includes limited farmer/buyer details |
 | `PATCH` | `/api/deals/:id/status` | `ACCEPTED → CONFIRMED → IN_PROGRESS → COMPLETED` (`CANCELLED` from any non-terminal state); invalid jump → `400` |
 | `PATCH` | `/api/deals/:id/cancel` | records `cancellationReason` |
 
 - `totalAmount = quantity × agreedPrice` is always computed server-side; client totals are ignored. Deal status changes and cancellations emit buyer + farmer notifications.
 - All `/api/deals/*` and `/api/notifications/*` routes require a verified Auth0 JWT (see Authentication) and enforce participant/ownership checks (`403` on mismatch). `GET /api/deals/:id`, status updates and cancellation are restricted to the deal's farmer or buyer.
+
+### Authorization on B3 reads
+
+Identity comes **only** from the verified JWT `sub` (see Authentication). There is no
+`x-user-id` fallback, and no collection endpoint reads an owner from the query string.
+
+| Caller role | `GET /api/deals`, `/api/deals/summary` | `/api/deals/farmer/:id`, `/api/deals/buyer/:id` |
+|---|---|---|
+| `farmer` | only deals where they are the farmer | own farmer history; buyer history → `403` |
+| `buyer` | only deals where they are the buyer | own buyer history; farmer history → `403` |
+| any other role | `403` | `403` |
+| `admin` / `system` | all deals (may narrow with `?farmerId=`/`?buyerId=`) | allowed |
+
+- Collection reads are scoped in the service layer (`dealService.resolveOwnerFilter`), not
+  only in route middleware, so a new route cannot accidentally expose the whole book of
+  business. A `farmerId`/`buyerId` filter naming another participant is rejected with
+  `403` rather than silently ignored, and an absent filter means *the caller's own*
+  deals — `GET /api/deals/summary` with no parameters is a personal summary, never a
+  platform-wide one.
+- Notification endpoints (`/api/notifications`, `/unread`, `/read-all`, `/:id/read`) are
+  always scoped to `req.user.id`; another user's notification is `403` to list, count or
+  mark as read.
+- `admin`/`system` are the only cross-participant roles. They are deliberately explicit so
+  that operational access stays auditable; no other role can widen its own scope.
 
 ### What `offerId` is (and is not)
 

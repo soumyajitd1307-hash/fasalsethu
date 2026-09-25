@@ -121,13 +121,16 @@ async function getUnreadCount(userId) {
  */
 async function markAsRead(notificationId, userId) {
   if (!notificationId) throw notFound(notificationId);
+  // Ownership is mandatory: a notification is only ever mutable by the user it
+  // belongs to, identified by the verified JWT `sub`.
+  if (!userId) throw forbidden('Authentication required to modify a notification');
 
   const prisma = clientOrThrow();
   const existing = await prisma.notification.findUnique({
     where: { id: notificationId },
   });
   if (!existing) throw notFound(notificationId);
-  if (userId && existing.userId !== userId) {
+  if (existing.userId !== userId) {
     throw forbidden('You cannot modify another user’s notification');
   }
 
