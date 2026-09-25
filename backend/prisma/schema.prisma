@@ -28,6 +28,7 @@ model Farmer {
   updatedAt  DateTime @updatedAt
 
   cropListings CropListing[]
+  deals        Deal[]
 
   @@index([phone])
   @@index([district, state])
@@ -50,6 +51,7 @@ model Buyer {
   updatedAt   DateTime @updatedAt
 
   requirements BuyerRequirement[]
+  deals        Deal[]
 
   @@index([phone])
   @@index([district, state])
@@ -127,3 +129,58 @@ model MarketPrice {
   @@index([market, observedAt])
   @@map("market_prices")
 }
+
+// Deal / Transaction entity (B3 Task).
+// Represents an agreed, binding contract between a Farmer and Buyer.
+// Lifecycle: ACCEPTED -> CONFIRMED -> IN_PROGRESS -> COMPLETED (or CANCELLED).
+model Deal {
+  id                 String    @id @default(cuid())
+  offerId            String    @unique
+  farmerId           String
+  buyerId            String
+  cropId             String?
+  cropName           String
+  quantity           Float
+  unit               String    @default("quintal")
+  agreedPrice        Float
+  totalAmount        Float
+  pickupLocation     String?
+  deliveryLocation   String?
+  status             String    @default("ACCEPTED")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  farmer             Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  buyer              Buyer     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  notifications      Notification[]
+
+  @@index([farmerId])
+  @@index([buyerId])
+  @@index([status])
+  @@map("deals")
+}
+
+// In-app notifications for deals and offers (B3 Task).
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  userRole  String?
+  type      String
+  title     String
+  message   String
+  dealId    String?
+  offerId   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
