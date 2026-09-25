@@ -121,7 +121,7 @@ export default function BuyerLogin() {
                   Authentication Successful
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Accessing Haven wholesale marketplace and active trade contracts...
+                  Accessing Fasal sethu wholesale marketplace and active trade contracts...
                 </p>
               </motion.div>
             ) : (

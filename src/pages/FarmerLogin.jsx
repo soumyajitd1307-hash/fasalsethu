@@ -345,7 +345,7 @@ export default function FarmerLogin() {
           {/* Footer note */}
           <div className="mt-6 pt-5 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-500">
-              New to Haven?{' '}
+              New to Fasal sethu?{' '}
               <Link to="/seller" className="font-semibold text-green-700 hover:underline">
                 Register as a New Farmer →
               </Link>

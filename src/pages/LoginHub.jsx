@@ -37,7 +37,7 @@ export default function LoginHub() {
             className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 border border-green-200 shadow-sm text-green-800 text-xs font-semibold mb-4"
           >
             <ShieldCheck className="w-4 h-4 text-green-600" />
-            Haven Secure Access Gateway
+            Fasal sethu Secure Access Gateway
           </motion.div>
 
           <motion.h1
@@ -55,7 +55,7 @@ export default function LoginHub() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-gray-500 text-sm sm:text-base mt-3 leading-relaxed"
           >
-            Welcome to Haven. Please choose your portal to access your customized dashboard and features.
+            Welcome to Fasal sethu. Please choose your portal to access your customized dashboard and features.
           </motion.p>
         </div>
 

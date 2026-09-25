@@ -20,12 +20,12 @@ export default function Navbar() {
           transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           className="pointer-events-auto flex items-center justify-between gap-6 sm:gap-8 px-5 sm:px-7 py-2.5 rounded-full bg-white/85 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:bg-white/95 transition-all duration-300"
         >
-          {/* Brand: Haven Orange Circular Icon */}
+          {/* Brand: Fasal sethu */}
           <Link to="/" className="flex items-center gap-2 group select-none">
             <div className="w-5 h-5 rounded-full border-[3px] border-[#ea580c] flex items-center justify-center group-hover:scale-105 transition-transform">
               <div className="w-1.5 h-1.5 rounded-full bg-[#ea580c]" />
             </div>
-            <span className="font-display font-bold text-gray-900 text-base tracking-tight">Haven</span>
+            <span className="font-display font-bold text-gray-900 text-base tracking-tight">Fasal sethu</span>
           </Link>
 
           {/* Desktop Nav Links */}
