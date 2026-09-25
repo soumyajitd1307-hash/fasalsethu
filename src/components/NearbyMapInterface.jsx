@@ -21,6 +21,10 @@ export default function NearbyMapInterface({
   const [internalRadius, setInternalRadius] = useState(selectedRadius)
   const [viewMode, setViewMode] = useState('MAP') // 'MAP' or 'LIST'
 
+  const [customHub, setCustomHub] = useState('')
+  const [isEditingHub, setIsEditingHub] = useState(false)
+  const [currentFarmerLocation, setCurrentFarmerLocation] = useState(farmerLocation)
+
   const currentRadius = onRadiusChange ? selectedRadius : internalRadius
 
   function handleRadiusSelect(r) {
@@ -28,6 +32,14 @@ export default function NearbyMapInterface({
       onRadiusChange(r)
     } else {
       setInternalRadius(r)
+    }
+  }
+
+  function handleSaveHub(e) {
+    e.preventDefault()
+    if (customHub.trim()) {
+      setCurrentFarmerLocation(customHub.trim())
+      setIsEditingHub(false)
     }
   }
 
@@ -39,6 +51,21 @@ export default function NearbyMapInterface({
 
   const currentActiveId = activeBuyerId || (filteredBuyers[0] && filteredBuyers[0].id)
   const activeBuyer = buyers.find(b => b.id === currentActiveId) || filteredBuyers[0] || buyers[0]
+
+  // Calculate selected buyer coordinate on radar for route vector
+  const activeIndex = filteredBuyers.findIndex(b => b.id === currentActiveId)
+  let activePos = null
+  if (activeIndex !== -1) {
+    const activeDist = filteredBuyers[activeIndex].distance !== undefined ? filteredBuyers[activeIndex].distance : filteredBuyers[activeIndex].distanceKm
+    const angle = (activeIndex * 72 + 35) * (Math.PI / 180)
+    const maxPx = 180
+    const distRatio = Math.min(activeDist / currentRadius, 0.92)
+    const rPx = distRatio * maxPx
+    activePos = {
+      x: Math.cos(angle) * rPx,
+      y: Math.sin(angle) * rPx,
+    }
+  }
 
   return (
     <div className="bg-white border border-green-100 rounded-3xl shadow-sm overflow-hidden">
@@ -54,10 +81,39 @@ export default function NearbyMapInterface({
               M5 Live Geo-Link
             </span>
           </div>
-          <p className="text-gray-500 text-xs flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5 text-green-600" />
-            Your Farm Hub: <span className="font-medium text-gray-700">{farmerLocation}</span>
-          </p>
+
+          <div className="text-gray-500 text-xs flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-green-600" />
+              Your Farm Hub: <strong className="text-gray-800 font-semibold">{currentFarmerLocation}</strong>
+            </span>
+            {!isEditingHub ? (
+              <button
+                type="button"
+                onClick={() => setIsEditingHub(true)}
+                className="text-green-700 hover:text-green-900 font-bold underline ml-1"
+              >
+                Change Hub
+              </button>
+            ) : (
+              <form onSubmit={handleSaveHub} className="inline-flex items-center gap-1.5 ml-1">
+                <input
+                  type="text"
+                  placeholder="Enter village / district"
+                  value={customHub}
+                  onChange={e => setCustomHub(e.target.value)}
+                  className="px-2.5 py-0.5 rounded-lg border border-green-300 text-xs text-gray-900 focus:outline-none"
+                  autoFocus
+                />
+                <button type="submit" className="px-2 py-0.5 rounded-lg bg-green-700 text-white font-bold text-[10px]">
+                  Save
+                </button>
+                <button type="button" onClick={() => setIsEditingHub(false)} className="text-gray-400 hover:text-gray-600 text-xs">
+                  ✕
+                </button>
+              </form>
+            )}
+          </div>
         </div>
 
         {/* Filter Radius & View Toggle */}
@@ -110,7 +166,7 @@ export default function NearbyMapInterface({
 
       {/* Main Body: Map or List */}
       <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[460px]">
-        {/* Left: Interactive Canvas Map */}
+        {/* Left: Interactive Canvas Map or List View */}
         <div className="lg:col-span-7 xl:col-span-8 relative bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-950 p-6 flex items-center justify-center overflow-hidden min-h-[380px]">
           {/* Loading Overlay */}
           {isLoading && (
@@ -137,118 +193,184 @@ export default function NearbyMapInterface({
             </div>
           )}
 
-          {/* Background Grid Pattern */}
-          <div
-            className="absolute inset-0 opacity-15"
-            style={{
-              backgroundImage: 'radial-gradient(rgba(74, 222, 128, 0.4) 1px, transparent 1px)',
-              backgroundSize: '24px 24px',
-            }}
-          />
+          {viewMode === 'LIST' ? (
+            /* Tabular List View */
+            <div className="w-full h-full max-h-[420px] overflow-y-auto bg-slate-900/90 rounded-2xl p-4 border border-white/10 z-20 space-y-2.5">
+              <div className="flex items-center justify-between text-xs text-green-300 font-mono pb-2 border-b border-white/10">
+                <span>BUYER ENTITY</span>
+                <span>DISTANCE / FREIGHT</span>
+                <span>ACTION</span>
+              </div>
+              {filteredBuyers.map(b => {
+                const dist = b.distance !== undefined ? b.distance : b.distanceKm
+                const isSelected = b.id === currentActiveId
+                return (
+                  <div
+                    key={b.id}
+                    onClick={() => onSelectBuyer && onSelectBuyer(b)}
+                    className={`p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? 'bg-emerald-900/60 border-emerald-400 text-white'
+                        : 'bg-black/40 border-white/10 text-gray-300 hover:bg-black/60'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-bold text-sm text-white">{b.name}</p>
+                      <p className="text-xs text-gray-400">{b.type} · {b.location}</p>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-xs font-bold text-emerald-400">{dist} km</span>
+                      <p className="text-[10px] text-gray-400">
+                        {b.freightStatus || b.transportProvided ? 'Free Pickup' : 'Delivery'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (onSelectBuyer) onSelectBuyer(b)
+                        setViewMode('MAP')
+                      }}
+                      className="px-3 py-1 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-semibold"
+                    >
+                      Focus Map
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            /* Interactive Radar Map View */
+            <>
+              {/* Background Grid Pattern */}
+              <div
+                className="absolute inset-0 opacity-15"
+                style={{
+                  backgroundImage: 'radial-gradient(rgba(74, 222, 128, 0.4) 1px, transparent 1px)',
+                  backgroundSize: '24px 24px',
+                }}
+              />
 
-          {/* Concentric Radius Rings */}
-          <div className="relative w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] flex items-center justify-center">
-            {/* 100km ring */}
-            <div className="absolute inset-0 rounded-full border border-green-500/20 flex items-start justify-center pt-2">
-              <span className="text-[10px] text-green-400/60 font-mono tracking-widest">100 KM RADIUS</span>
-            </div>
-            {/* 50km ring */}
-            <div className="absolute inset-12 rounded-full border border-green-500/30 flex items-start justify-center pt-2">
-              <span className="text-[10px] text-green-400/80 font-mono tracking-widest">50 KM</span>
-            </div>
-            {/* 25km ring */}
-            <div className="absolute inset-24 rounded-full border border-green-500/40 flex items-start justify-center pt-2">
-              <span className="text-[9px] text-green-400 font-mono tracking-widest">25 KM</span>
-            </div>
-            {/* 10km ring */}
-            <div className="absolute inset-36 rounded-full border border-green-400/60 flex items-start justify-center pt-1.5">
-              <span className="text-[8px] text-green-300 font-mono tracking-widest">10 KM</span>
-            </div>
-
-            {/* Pulsing Radar Sweep */}
-            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-green-500/10 via-transparent to-transparent animate-spin-slow pointer-events-none" />
-
-            {/* Central Farm Pin (You) */}
-            <div className="absolute z-20 flex flex-col items-center">
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center shadow-lg shadow-green-500/50">
-                  <span className="text-white text-xs font-bold">🏡</span>
+              {/* Concentric Radius Rings */}
+              <div className="relative w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] flex items-center justify-center">
+                {/* 100km ring */}
+                <div className="absolute inset-0 rounded-full border border-green-500/20 flex items-start justify-center pt-2">
+                  <span className="text-[10px] text-green-400/60 font-mono tracking-widest">100 KM RADIUS</span>
                 </div>
-                <span className="absolute -inset-1 rounded-full border-2 border-emerald-400 animate-ping opacity-60" />
-              </div>
-              <div className="mt-1 px-2.5 py-0.5 rounded-full bg-white/90 text-gray-900 text-[10px] font-bold shadow-md">
-                My Farm
-              </div>
-            </div>
+                {/* 50km ring */}
+                <div className="absolute inset-12 rounded-full border border-green-500/30 flex items-start justify-center pt-2">
+                  <span className="text-[10px] text-green-400/80 font-mono tracking-widest">50 KM</span>
+                </div>
+                {/* 25km ring */}
+                <div className="absolute inset-24 rounded-full border border-green-500/40 flex items-start justify-center pt-2">
+                  <span className="text-[9px] text-green-400 font-mono tracking-widest">25 KM</span>
+                </div>
+                {/* 10km ring */}
+                <div className="absolute inset-36 rounded-full border border-green-400/60 flex items-start justify-center pt-1.5">
+                  <span className="text-[8px] text-green-300 font-mono tracking-widest">10 KM</span>
+                </div>
 
-            {/* Buyer Pins within Range */}
-            {filteredBuyers.map((b, idx) => {
-              const dist = b.distance !== undefined ? b.distance : b.distanceKm
-              const angle = (idx * 72 + 35) * (Math.PI / 180)
-              const maxPx = 180
-              const distRatio = Math.min(dist / currentRadius, 0.92)
-              const rPx = distRatio * maxPx
-              const posX = Math.cos(angle) * rPx
-              const posY = Math.sin(angle) * rPx
+                {/* Pulsing Radar Sweep */}
+                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-green-500/10 via-transparent to-transparent animate-spin-slow pointer-events-none" />
 
-              const isSelected = b.id === currentActiveId
-              const providesFreePickup = b.freightStatus !== undefined ? b.freightStatus : b.transportProvided
+                {/* Route Vector SVG between Farm and Selected Buyer */}
+                {activePos && (
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none z-15 overflow-visible">
+                    <line
+                      x1="50%"
+                      y1="50%"
+                      x2={`calc(50% + ${activePos.x}px)`}
+                      y2={`calc(50% + ${activePos.y}px)`}
+                      stroke="rgba(251, 191, 36, 0.7)"
+                      strokeWidth="2.5"
+                      strokeDasharray="6 4"
+                    />
+                  </svg>
+                )}
 
-              return (
-                <motion.button
-                  key={b.id}
-                  type="button"
-                  onClick={() => {
-                    if (onSelectBuyer) onSelectBuyer(b)
-                  }}
-                  whileHover={{ scale: 1.15 }}
-                  className="absolute z-30 flex flex-col items-center cursor-pointer transition-all duration-200 group"
-                  style={{
-                    transform: `translate(${posX}px, ${posY}px)`,
-                  }}
-                >
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-md transition-all ${
-                      isSelected
-                        ? 'bg-amber-400 text-gray-900 ring-4 ring-amber-300/50 scale-125 z-40'
-                        : providesFreePickup
-                        ? 'bg-green-500 text-white ring-2 ring-white/60'
-                        : 'bg-sky-500 text-white ring-2 ring-white/60'
-                    }`}
-                  >
-                    🏢
+                {/* Central Farm Pin (You) */}
+                <div className="absolute z-20 flex flex-col items-center">
+                  <div className="relative">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center shadow-lg shadow-green-500/50">
+                      <span className="text-white text-xs font-bold">🏡</span>
+                    </div>
+                    <span className="absolute -inset-1 rounded-full border-2 border-emerald-400 animate-ping opacity-60" />
                   </div>
-                  <div
-                    className={`mt-1 px-2 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap shadow-md transition-all ${
-                      isSelected
-                        ? 'bg-amber-400 text-gray-900 scale-105'
-                        : 'bg-black/75 text-white/90 group-hover:bg-white group-hover:text-black'
-                    }`}
-                  >
-                    {b.name.split(' ')[0]} ({dist}km)
+                  <div className="mt-1 px-2.5 py-0.5 rounded-full bg-white/90 text-gray-900 text-[10px] font-bold shadow-md">
+                    My Farm Hub
                   </div>
-                </motion.button>
-              )
-            })}
-          </div>
+                </div>
 
-          {/* Map Legend */}
-          <div className="absolute bottom-3 left-4 z-20 flex flex-wrap gap-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-[10px] text-gray-300">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> My Farm
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Free Farmgate Pickup
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-sky-500" /> Farmer Delivery
-            </span>
-          </div>
+                {/* Buyer Pins within Range */}
+                {filteredBuyers.map((b, idx) => {
+                  const dist = b.distance !== undefined ? b.distance : b.distanceKm
+                  const angle = (idx * 72 + 35) * (Math.PI / 180)
+                  const maxPx = 180
+                  const distRatio = Math.min(dist / currentRadius, 0.92)
+                  const rPx = distRatio * maxPx
+                  const posX = Math.cos(angle) * rPx
+                  const posY = Math.sin(angle) * rPx
 
-          {/* Active Radius Badge */}
-          <div className="absolute top-3 right-4 z-20 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl border border-white/10 text-[11px] font-mono text-green-400">
-            📍 Showing {filteredBuyers.length} buyers within {currentRadius} km
-          </div>
+                  const isSelected = b.id === currentActiveId
+                  const providesFreePickup = b.freightStatus !== undefined ? b.freightStatus : b.transportProvided
+
+                  return (
+                    <motion.button
+                      key={b.id}
+                      type="button"
+                      onClick={() => {
+                        if (onSelectBuyer) onSelectBuyer(b)
+                      }}
+                      whileHover={{ scale: 1.15 }}
+                      className="absolute z-30 flex flex-col items-center cursor-pointer transition-all duration-200 group"
+                      style={{
+                        transform: `translate(${posX}px, ${posY}px)`,
+                      }}
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shadow-md transition-all ${
+                          isSelected
+                            ? 'bg-amber-400 text-gray-900 ring-4 ring-amber-300/50 scale-125 z-40'
+                            : providesFreePickup
+                            ? 'bg-green-500 text-white ring-2 ring-white/60'
+                            : 'bg-sky-500 text-white ring-2 ring-white/60'
+                        }`}
+                      >
+                        🏢
+                      </div>
+                      <div
+                        className={`mt-1 px-2 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap shadow-md transition-all ${
+                          isSelected
+                            ? 'bg-amber-400 text-gray-900 scale-105'
+                            : 'bg-black/75 text-white/90 group-hover:bg-white group-hover:text-black'
+                        }`}
+                      >
+                        {b.name.split(' ')[0]} ({dist}km)
+                      </div>
+                    </motion.button>
+                  )
+                })}
+              </div>
+
+              {/* Map Legend */}
+              <div className="absolute bottom-3 left-4 z-20 flex flex-wrap gap-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-[10px] text-gray-300">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> My Farm Hub
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500" /> Free Farmgate Pickup
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-sky-500" /> Farmer Delivery
+                </span>
+              </div>
+
+              {/* Active Radius Badge */}
+              <div className="absolute top-3 right-4 z-20 bg-black/60 backdrop-blur-md px-3 py-1 rounded-xl border border-white/10 text-[11px] font-mono text-green-400">
+                📍 Showing {filteredBuyers.length} buyers within {currentRadius} km
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right: Selected Buyer Detail Card & Route Info */}
