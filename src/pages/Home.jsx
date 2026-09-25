@@ -126,16 +126,16 @@ function StepCard({ number, title, desc, icon: Icon, delay }) {
       transition={{ duration: 0.5, delay }}
       className="flex gap-5 items-start"
     >
-      <div className="shrink-0 w-12 h-12 rounded-2xl bg-green-600 flex items-center justify-center
+      <div className="shrink-0 w-12 h-12 rounded-2xl bg-green-700 flex items-center justify-center
                       text-white font-display font-bold text-lg shadow-md">
         {number}
       </div>
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Icon className="w-4 h-4 text-green-500" />
-          <h4 className="font-display font-bold text-gray-900">{title}</h4>
+          <Icon className="w-4 h-4 text-green-800 drop-shadow-[0_1px_2px_rgba(255,255,255,0.8)]" />
+          <h4 className="font-display font-extrabold text-black text-base drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]">{title}</h4>
         </div>
-        <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+        <p className="text-gray-950 font-semibold text-sm leading-relaxed drop-shadow-[0_1px_3px_rgba(255,255,255,0.9)]">{desc}</p>
       </div>
     </motion.div>
   )
