@@ -175,6 +175,46 @@ const cropListingUpdateSchema = z
   .strict()
   .superRefine(checkPriceRange);
 
+// --- Market-price API schemas (B1 Task 4) ---
+// Read-only filters over normalized Agmarknet observations. Text filters
+// accept '' as absent (lenient query strings); dateFrom must be <= dateTo.
+const filterText = z.preprocess(
+  (v) => (v === '' ? undefined : v),
+  z.string().trim().min(1, 'must not be empty').max(120, 'too long').optional()
+);
+
+function checkDateRange(data, ctx) {
+  if (data.dateFrom !== undefined && data.dateTo !== undefined && data.dateFrom > data.dateTo) {
+    ctx.addIssue({
+      code: z.ZOD_ISSUE_CUSTOM,
+      message: 'dateFrom must be <= dateTo',
+      path: ['dateFrom'],
+    });
+  }
+}
+
+const marketPriceQuerySchema = paginationQuerySchema
+  .extend({
+    commodity: filterText,
+    variety: filterText,
+    state: filterText,
+    district: filterText,
+    market: filterText,
+    date: z.coerce.date().optional(),
+    dateFrom: z.coerce.date().optional(),
+    dateTo: z.coerce.date().optional(),
+  })
+  .superRefine(checkDateRange);
+
+const marketPriceContextSchema = z
+  .object({
+    commodity: z.string().trim().min(1, 'commodity is required'),
+    state: filterText,
+    district: filterText,
+    market: filterText,
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  });
+
 module.exports = {
   farmerSchema,
   buyerSchema,
@@ -184,6 +224,8 @@ module.exports = {
   farmerUpdateSchema,
   cropListingCreateSchema,
   cropListingUpdateSchema,
+  marketPriceQuerySchema,
+  marketPriceContextSchema,
   paginationQuerySchema,
   validateBody,
   validateQuery,
