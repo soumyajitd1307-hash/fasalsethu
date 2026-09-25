@@ -215,6 +215,58 @@ const marketPriceContextSchema = z
     limit: z.coerce.number().int().min(1).max(100).default(20),
   });
 
+// --- Deal API schemas (B3 Task) ---
+const dealStatusSchema = z.enum([
+  'ACCEPTED',
+  'CONFIRMED',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED',
+]);
+
+const dealCreateSchema = z
+  .object({
+    offerId: z.string().trim().min(1, 'offerId is required'),
+    pickupLocation: z.string().trim().max(250).optional(),
+    deliveryLocation: z.string().trim().max(250).optional(),
+  })
+  .strict();
+
+const dealStatusUpdateSchema = z
+  .object({
+    status: dealStatusSchema,
+  })
+  .strict();
+
+const dealCancelSchema = z
+  .object({
+    reason: z.string().trim().max(500).optional(),
+  })
+  .strict();
+
+const dealQuerySchema = paginationQuerySchema.extend({
+  status: dealStatusSchema.optional(),
+  farmerId: z.string().trim().optional(),
+  buyerId: z.string().trim().optional(),
+});
+
+// --- Notification API schemas (B3 Task) ---
+const notificationQuerySchema = paginationQuerySchema.extend({
+  read: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+});
+
+const notificationCreateSchema = z
+  .object({
+    userId: z.string().trim().min(1, 'userId is required'),
+    userRole: z.string().trim().optional(),
+    type: z.string().trim().min(1, 'type is required'),
+    title: z.string().trim().min(1, 'title is required'),
+    message: z.string().trim().min(1, 'message is required'),
+    dealId: z.string().trim().optional(),
+    offerId: z.string().trim().optional(),
+  })
+  .strict();
+
 module.exports = {
   farmerSchema,
   buyerSchema,
@@ -226,7 +278,15 @@ module.exports = {
   cropListingUpdateSchema,
   marketPriceQuerySchema,
   marketPriceContextSchema,
+  dealStatusSchema,
+  dealCreateSchema,
+  dealStatusUpdateSchema,
+  dealCancelSchema,
+  dealQuerySchema,
+  notificationQuerySchema,
+  notificationCreateSchema,
   paginationQuerySchema,
   validateBody,
   validateQuery,
 };
+

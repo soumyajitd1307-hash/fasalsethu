@@ -5,6 +5,8 @@ const healthRoutes = require('./routes/health.routes');
 const farmerRoutes = require('./routes/farmer.routes');
 const cropListingRoutes = require('./routes/cropListing.routes');
 const marketPriceRoutes = require('./routes/marketPrice.routes');
+const dealRoutes = require('./routes/deal.routes');
+const notificationRoutes = require('./routes/notification.routes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -29,6 +31,8 @@ app.use('/api/health', healthRoutes);
 app.use('/api/farmers', farmerRoutes);
 app.use('/api/crop-listings', cropListingRoutes);
 app.use('/api/market-prices', marketPriceRoutes);
+app.use('/api/deals', dealRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use('/api', notFound);
 app.use(errorHandler);
