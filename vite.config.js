@@ -5,6 +5,8 @@ export default defineConfig({
   base: '/fasalsethu/',
   plugins: [react()],
   server: {
+    port: 5174,
+    strictPort: true,
     watch: {
       usePolling: true,
     },
