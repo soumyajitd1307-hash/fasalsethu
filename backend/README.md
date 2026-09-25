@@ -74,7 +74,15 @@ npm run dev   # nodemon, development
 npm start     # production
 ```
 
-Backend port: `http://localhost:8000` (or `$PORT`).
+Backend port: `http://localhost:8000` (or `$PORT`). The server binds the configured port on all interfaces, so platforms can route to it; `npm start` runs plain `node` (no nodemon) for production.
+
+## Production deployment prerequisites (not yet deployed)
+
+1. Provision managed PostgreSQL; set `DATABASE_URL` (format `postgresql://USER:PASSWORD@HOST:PORT/DATABASE`, `?schema=public` for Prisma).
+2. Set `NODE_ENV=production`, `PORT` (or accept the platform default), and `CORS_ORIGIN` to the deployed frontend origin(s).
+3. Install + generate + apply migrations once: `npm install`, `npm run db:generate`, `npm run db:deploy` (never `migrate reset` / drops; no seed step exists).
+4. Start with `npm start`; verify `GET /api/health` shows `database.connected: true`.
+5. No cloud provider, database, or public URL exists yet — nothing here claims otherwise.
 
 ## Health check
 
