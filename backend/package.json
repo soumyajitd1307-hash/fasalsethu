@@ -1,0 +1,35 @@
+{
+  "name": "fasalsethu-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FasalSethu backend foundation — Express + PostgreSQL (Prisma). Farmer/Buyer listings & requirements schema.",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate dev --name init",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "mandi:import": "node scripts/import-mandi-csv.js",
+    "test": "node --test tests/unit.validate.test.js tests/unit.normalize.test.js tests/unit.priceDiscovery.test.js tests/unit.matching.test.js tests/integration.api.test.js",
+    "test:unit": "node --test tests/unit.validate.test.js tests/unit.normalize.test.js tests/unit.priceDiscovery.test.js tests/unit.matching.test.js",
+    "test:integration": "node --test tests/integration.api.test.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "prisma": "^5.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
