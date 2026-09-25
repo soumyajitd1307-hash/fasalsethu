@@ -2,6 +2,8 @@
 
 Express + PostgreSQL (Prisma) backend. Frontend is untouched — this service is independent.
 
+Product terminology: **Buyer = Retailer**. The database/API models keep the names `Buyer` / `BuyerRequirement` (a `BuyerRequirement` is a retailer's crop purchasing requirement). No retailer matching is implemented yet — do not rename these models casually.
+
 ## Structure
 
 ```text
@@ -42,7 +44,7 @@ cp .env.example .env
 | Var | Default | Purpose |
 |---|---|---|
 | `PORT` | `8000` | Backend port |
-| `DATABASE_URL` | — | Prisma Postgres URL |
+| `DATABASE_URL` | — | Prisma Postgres URL, e.g. `postgresql://USER:PASSWORD@HOST:PORT/DATABASE` (never commit real credentials) |
 | `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin(s), comma-separated |
 | `NODE_ENV` | `development` | `development` shows error stacks |
 
@@ -93,6 +95,21 @@ Expected (DB unconfigured):
 ```
 
 With a live DB: `"database": { "configured": true, "connected": true, "latencyMs": N }`.
+
+## Tests (Task 6)
+
+No external test framework — the suite uses Node's built-in `node:test` + `node:assert` (zero new dependencies, no internet needed; all HTTP tests hit `127.0.0.1` only).
+
+```bash
+npm test                # unit + integration (integration needs DATABASE_URL)
+npm run test:unit        # validation / normalization / CSV only, always runnable
+npm run test:integration # live API tests, requires DATABASE_URL
+```
+
+- `npm test` exits `0` on success, non-zero on any failure, with readable `✔/✖` output.
+- Without `DATABASE_URL`, DB tests report `BLOCKED` (skipped with reason) instead of faking results; e.g. `DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE" npm test` runs the full suite.
+- Test isolation: no `migrate reset`, no drops, no arbitrary deletes. Integration tests use uniquely prefixed records (`Tst…` + timestamp) and delete only what they created (farmer delete cascades its listings). There is no dedicated test database yet — point `DATABASE_URL` at a dev/test database, not production.
+- Synthetic market-price rows used by tests are clearly labelled synthetic (`source: "synthetic-test"`) — no authentic government dataset ships with this repo.
 
 ## Farmer API (B1 Task 2)
 
