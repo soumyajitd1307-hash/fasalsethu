@@ -151,3 +151,63 @@ describe('market-price query validation', () => {
     assert.equal(r.data.limit, 20);
   });
 });
+
+describe('buyer validation', () => {
+  test('accepts a valid create payload', () => {
+    const r = v.buyerCreateSchema.safeParse({ name: 'Sahyadri Agro', phone: '+919812345678' });
+    assert.equal(r.success, true);
+  });
+
+  test('rejects missing name / bad phone / bad email / bad coordinates', () => {
+    assert.equal(v.buyerCreateSchema.safeParse({ phone: '+919812345678' }).success, false);
+    assert.equal(v.buyerCreateSchema.safeParse({ name: 'Sahyadri', phone: 'invalid' }).success, false);
+    assert.equal(
+      v.buyerCreateSchema.safeParse({ name: 'Sahyadri', phone: '+919812345678', email: 'notanemail' }).success,
+      false
+    );
+    assert.equal(
+      v.buyerCreateSchema.safeParse({ name: 'Sahyadri', phone: '+919812345678', latitude: 95 }).success,
+      false
+    );
+  });
+
+  test('create rejects id / timestamps / unknown fields', () => {
+    const base = { name: 'Sahyadri', phone: '+919812345678' };
+    for (const extra of [{ id: 'x' }, { createdAt: '2024-01-01' }, { updatedAt: '2024-01-01' }, { trustScore: 90 }]) {
+      assert.equal(v.buyerCreateSchema.safeParse({ ...base, ...extra }).success, false, JSON.stringify(extra));
+    }
+  });
+
+  test('update allows partial fields but rejects id / timestamps', () => {
+    assert.equal(v.buyerUpdateSchema.safeParse({ companyName: 'Sahyadri Ltd' }).success, true);
+    assert.equal(v.buyerUpdateSchema.safeParse({ id: 'x' }).success, false);
+    assert.equal(v.buyerUpdateSchema.safeParse({}).success, true);
+  });
+});
+
+describe('buyer requirement validation', () => {
+  const base = { buyerId: 'b1', cropName: 'Onion', requiredQuantity: 500, unit: 'quintal', targetPrice: 1500 };
+
+  test('accepts valid payload', () => {
+    assert.equal(v.buyerRequirementCreateSchema.safeParse(base).success, true);
+  });
+
+  test('rejects missing required fields / invalid quantity / negative price', () => {
+    assert.equal(v.buyerRequirementCreateSchema.safeParse({ ...base, buyerId: '' }).success, false);
+    assert.equal(v.buyerRequirementCreateSchema.safeParse({ ...base, requiredQuantity: 0 }).success, false);
+    assert.equal(v.buyerRequirementCreateSchema.safeParse({ ...base, requiredQuantity: -10 }).success, false);
+    assert.equal(v.buyerRequirementCreateSchema.safeParse({ ...base, targetPrice: -1 }).success, false);
+  });
+
+  test('rejects id / timestamps / unknown fields', () => {
+    for (const extra of [{ id: 'x' }, { createdAt: '2024-01-01' }, { updatedAt: '2024-01-01' }, { farmerId: 'f1' }]) {
+      assert.equal(v.buyerRequirementCreateSchema.safeParse({ ...base, ...extra }).success, false, JSON.stringify(extra));
+    }
+  });
+
+  test('update allows partial fields', () => {
+    assert.equal(v.buyerRequirementUpdateSchema.safeParse({ targetPrice: 1600 }).success, true);
+    assert.equal(v.buyerRequirementUpdateSchema.safeParse({ id: 'x' }).success, false);
+  });
+});
+

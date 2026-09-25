@@ -215,6 +215,49 @@ const marketPriceContextSchema = z
     limit: z.coerce.number().int().min(1).max(100).default(20),
   });
 
+// --- Buyer API schemas (B2 Step 2) ---
+// Clients must NOT set id / createdAt / updatedAt (.strict() rejects them).
+const buyerCreateSchema = z
+  .object({
+    name: z.string().trim().min(2, 'name is required (min 2 chars)'),
+    companyName: z.string().trim().optional(),
+    phone: z.string().trim().regex(phoneRegex, 'invalid phone format'),
+    email: emailField,
+    buyerType: z.string().trim().optional(),
+    village: z.string().trim().optional(),
+    district: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    latitude: latSchema.optional(),
+    longitude: lngSchema.optional(),
+  })
+  .strict();
+
+const buyerUpdateSchema = buyerCreateSchema.partial().strict();
+
+// --- Buyer Requirement API schemas (B2 Step 2) ---
+// Mirrors the Prisma BuyerRequirement model.
+// Clients must NOT set id / createdAt / updatedAt (.strict() rejects them).
+const buyerRequirementFieldShape = {
+  buyerId: z.string().trim().min(1, 'buyerId is required'),
+  cropName: z.string().trim().min(1, 'cropName is required'),
+  requiredQuantity: z.number().positive('requiredQuantity must be > 0'),
+  unit: z.string().trim().min(1, 'unit is required (e.g. quintal, kg, tonne)'),
+  targetPrice: z.number().nonnegative('targetPrice must be >= 0'),
+  neededBy: z.coerce.date().optional(),
+  latitude: latSchema.optional(),
+  longitude: lngSchema.optional(),
+  status: statusSchema.optional(),
+};
+
+const buyerRequirementCreateSchema = z
+  .object(buyerRequirementFieldShape)
+  .strict();
+
+const buyerRequirementUpdateSchema = z
+  .object(buyerRequirementFieldShape)
+  .partial()
+  .strict();
+
 module.exports = {
   farmerSchema,
   buyerSchema,
@@ -224,9 +267,14 @@ module.exports = {
   farmerUpdateSchema,
   cropListingCreateSchema,
   cropListingUpdateSchema,
+  buyerCreateSchema,
+  buyerUpdateSchema,
+  buyerRequirementCreateSchema,
+  buyerRequirementUpdateSchema,
   marketPriceQuerySchema,
   marketPriceContextSchema,
   paginationQuerySchema,
   validateBody,
   validateQuery,
 };
+

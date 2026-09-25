@@ -14,8 +14,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "mandi:import": "node scripts/import-mandi-csv.js",
-    "test": "node --test tests/unit.validate.test.js tests/unit.normalize.test.js tests/integration.api.test.js",
-    "test:unit": "node --test tests/unit.validate.test.js tests/unit.normalize.test.js",
+    "test": "node --test tests/unit.validate.test.js tests/unit.normalize.test.js tests/unit.priceDiscovery.test.js tests/unit.matching.test.js tests/integration.api.test.js",
+    "test:unit": "node --test tests/unit.validate.test.js tests/unit.normalize.test.js tests/unit.priceDiscovery.test.js tests/unit.matching.test.js",
     "test:integration": "node --test tests/integration.api.test.js"
   },
   "dependencies": {

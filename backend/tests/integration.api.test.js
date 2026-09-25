@@ -14,7 +14,7 @@ const TS = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString
 
 let baseUrl = '';
 let server = null;
-const created = { farmers: [], marketIds: [] };
+const created = { farmers: [], marketIds: [], buyers: [] };
 
 function url(path) {
   return `${baseUrl}${path}`;
@@ -72,6 +72,9 @@ after(async () => {
       }
       for (const id of created.farmers) {
         await prisma.farmer.deleteMany({ where: { id } }); // cascades crop listings
+      }
+      for (const id of created.buyers) {
+        await prisma.buyer.deleteMany({ where: { id } }); // cascades buyer requirements
       }
       await prisma.$disconnect();
     } catch (err) {
@@ -335,3 +338,197 @@ describe('market price import + API (synthetic data only)', { skip: SKIP_DB }, (
     assertNoLeak(miss.json, 'context miss');
   });
 });
+
+describe('buyer CRUD', { skip: SKIP_DB }, () => {
+  let buyerId = '';
+  const email = `byr-${TS}@example.com`;
+  const phone = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+
+  test('creates a buyer (201)', async () => {
+    const { status, json } = await api('POST', '/api/buyers', { name: 'Test Buyer', phone, email });
+    assert.equal(status, 201);
+    assert.equal(json.success, true);
+    assert.equal(json.data.name, 'Test Buyer');
+    buyerId = json.data.id;
+    created.buyers.push(buyerId);
+  });
+
+  test('rejects invalid payloads (400)', async () => {
+    const bad = await api('POST', '/api/buyers', { phone });
+    assert.equal(bad.status, 400);
+    assertNoLeak(bad.json, 'buyer validation');
+  });
+
+  test('rejects client-controlled id (400)', async () => {
+    const withId = await api('POST', '/api/buyers', { name: 'B2', phone, id: 'hack' });
+    assert.equal(withId.status, 400);
+  });
+
+  test('duplicate email returns clean 409', async () => {
+    const dup = await api('POST', '/api/buyers', { name: 'Dup Buyer', phone, email });
+    assert.equal(dup.status, 409);
+    assertNoLeak(dup.json, 'duplicate email');
+  });
+
+  test('lists with pagination', async () => {
+    const list = await api('GET', '/api/buyers?page=1&limit=5');
+    assert.equal(list.status, 200);
+    assert.ok(Array.isArray(list.json.data));
+    assert.ok(list.json.pagination.total >= 1);
+  });
+
+  test('gets one; missing returns 404 without leaks', async () => {
+    const one = await api('GET', `/api/buyers/${buyerId}`);
+    assert.equal(one.status, 200);
+    assert.equal(one.json.data.id, buyerId);
+    const miss = await api('GET', '/api/buyers/does-not-exist');
+    assert.equal(miss.status, 404);
+    assertNoLeak(miss.json, 'missing buyer');
+  });
+
+  test('updates allowed fields', async () => {
+    const upd = await api('PATCH', `/api/buyers/${buyerId}`, { companyName: 'Acme Traders' });
+    assert.equal(upd.status, 200);
+    assert.equal(upd.json.data.companyName, 'Acme Traders');
+  });
+
+  test('deletes and confirms gone', async () => {
+    const del = await api('DELETE', `/api/buyers/${buyerId}`);
+    assert.equal(del.status, 200);
+    created.buyers = created.buyers.filter((id) => id !== buyerId);
+    const gone = await api('GET', `/api/buyers/${buyerId}`);
+    assert.equal(gone.status, 404);
+  });
+});
+
+describe('buyer requirement CRUD', { skip: SKIP_DB }, () => {
+  let buyerId = '';
+  let reqId = '';
+
+  test('setup: buyer for requirements', async () => {
+    const phone = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+    const res = await api('POST', '/api/buyers', { name: 'Requirement Buyer', phone });
+    assert.equal(res.status, 201);
+    buyerId = res.json.data.id;
+    created.buyers.push(buyerId);
+  });
+
+  test('creates a buyer requirement (201)', async () => {
+    const { status, json } = await api('POST', '/api/buyer-requirements', {
+      buyerId, cropName: 'Onion', requiredQuantity: 200, unit: 'quintal', targetPrice: 1400,
+    });
+    assert.equal(status, 201);
+    assert.equal(json.data.cropName, 'Onion');
+    assert.equal(json.data.targetPrice, 1400);
+    reqId = json.data.id;
+  });
+
+  test('rejects ghost buyer (404) and bad quantity/price (400)', async () => {
+    const ghost = await api('POST', '/api/buyer-requirements', {
+      buyerId: 'ghost', cropName: 'Onion', requiredQuantity: 100, unit: 'quintal', targetPrice: 1400,
+    });
+    assert.equal(ghost.status, 404);
+    assertNoLeak(ghost.json, 'ghost buyer');
+
+    const badQty = await api('POST', '/api/buyer-requirements', {
+      buyerId, cropName: 'Onion', requiredQuantity: 0, unit: 'quintal', targetPrice: 1400,
+    });
+    assert.equal(badQty.status, 400);
+
+    const badPrice = await api('POST', '/api/buyer-requirements', {
+      buyerId, cropName: 'Onion', requiredQuantity: 100, unit: 'quintal', targetPrice: -50,
+    });
+    assert.equal(badPrice.status, 400);
+  });
+
+  test('lists with pagination and embeds buyer on GET one', async () => {
+    const list = await api('GET', '/api/buyer-requirements?page=1&limit=10');
+    assert.equal(list.status, 200);
+    assert.ok(list.json.pagination.total >= 1);
+    const one = await api('GET', `/api/buyer-requirements/${reqId}`);
+    assert.equal(one.status, 200);
+    assert.equal(one.json.data.buyer.name, 'Requirement Buyer');
+    const miss = await api('GET', '/api/buyer-requirements/nope');
+    assert.equal(miss.status, 404);
+    assertNoLeak(miss.json, 'missing requirement');
+  });
+
+  test('updates requirement fields', async () => {
+    const upd = await api('PATCH', `/api/buyer-requirements/${reqId}`, { targetPrice: 1450 });
+    assert.equal(upd.status, 200);
+    assert.equal(upd.json.data.targetPrice, 1450);
+  });
+
+  test('deletes the requirement', async () => {
+    const del = await api('DELETE', `/api/buyer-requirements/${reqId}`);
+    assert.equal(del.status, 200);
+    const gone = await api('GET', `/api/buyer-requirements/${reqId}`);
+    assert.equal(gone.status, 404);
+  });
+});
+
+describe('price discovery API', { skip: SKIP_DB }, () => {
+  let farmerId = '';
+  let listingId = '';
+
+  test('setup: farmer and listing', async () => {
+    const phone = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+    const fRes = await api('POST', '/api/farmers', { name: 'Price Discovery Farmer', phone });
+    farmerId = fRes.json.data.id;
+    created.farmers.push(farmerId);
+
+    const lRes = await api('POST', '/api/crop-listings', {
+      farmerId, cropName: 'Onion', quantity: 500, unit: 'quintal', minExpectedPrice: 2400, maxExpectedPrice: 2800,
+    });
+    listingId = lRes.json.data.id;
+  });
+
+  test('returns price discovery output for existing listing', async () => {
+    const { status, json } = await api('GET', `/api/price-discovery/${listingId}`);
+    assert.equal(status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.data.farmerPrice.midPrice, 2600);
+    assert.ok('marketPrice' in json.data);
+    assert.ok(Array.isArray(json.data.buyerPrices));
+  });
+
+  test('missing listing returns 404', async () => {
+    const { status, json } = await api('GET', '/api/price-discovery/does-not-exist');
+    assert.equal(status, 404);
+    assertNoLeak(json, 'price-discovery 404');
+  });
+});
+
+describe('matching API', { skip: SKIP_DB }, () => {
+  let farmerId = '';
+  let listingId = '';
+
+  test('setup: farmer and listing for matching', async () => {
+    const phone = `+91${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+    const fRes = await api('POST', '/api/farmers', { name: 'Matching Farmer', phone, latitude: 20.201, longitude: 73.832 });
+    farmerId = fRes.json.data.id;
+    created.farmers.push(farmerId);
+
+    const lRes = await api('POST', '/api/crop-listings', {
+      farmerId, cropName: 'Onion', quantity: 100, unit: 'quintal', minExpectedPrice: 2400, maxExpectedPrice: 2800, latitude: 20.201, longitude: 73.832,
+    });
+    listingId = lRes.json.data.id;
+  });
+
+  test('returns matches sorted by score for existing listing', async () => {
+    const { status, json } = await api('GET', `/api/matching/crop-listings/${listingId}`);
+    assert.equal(status, 200);
+    assert.equal(json.success, true);
+    assert.equal(json.data.cropListing.id, listingId);
+    assert.ok(Array.isArray(json.data.matches));
+  });
+
+  test('missing listing returns 404', async () => {
+    const { status, json } = await api('GET', '/api/matching/crop-listings/does-not-exist');
+    assert.equal(status, 404);
+    assertNoLeak(json, 'matching 404');
+  });
+});
+
+
+
