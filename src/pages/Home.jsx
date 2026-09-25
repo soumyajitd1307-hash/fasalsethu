@@ -101,16 +101,17 @@ function FeatureCard({ icon: Icon, title, desc, delay, accent }) {
       initial={{ opacity: 0, y: 36 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.55, delay }}
-      className="bg-white border border-green-100 rounded-3xl p-7
-                 card-hover card-shine group cursor-default
-                 shadow-sm hover:shadow-lg hover:border-green-200"
+      className="bg-black/35 backdrop-blur-md border border-white/25 rounded-3xl p-7
+                 card-hover group cursor-default
+                 shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:shadow-[0_12px_40px_rgba(0,0,0,0.3)]
+                 hover:bg-black/45 hover:border-white/40 transition-all duration-300"
     >
       <div className={`w-14 h-14 rounded-2xl ${accent} flex items-center justify-center mb-5
-                       group-hover:scale-110 transition-transform duration-300`}>
+                       group-hover:scale-110 transition-transform duration-300 shadow-md`}>
         <Icon className="w-7 h-7 text-white" />
       </div>
-      <h3 className="font-display font-bold text-lg text-gray-900 mb-2">{title}</h3>
-      <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+      <h3 className="font-display font-bold text-lg text-white mb-2 drop-shadow-md">{title}</h3>
+      <p className="text-gray-100 text-sm leading-relaxed font-medium drop-shadow-sm">{desc}</p>
     </motion.div>
   )
 }
