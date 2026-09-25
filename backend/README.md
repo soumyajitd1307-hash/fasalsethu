@@ -109,6 +109,33 @@ Requires live `DATABASE_URL` (endpoints return `503` when unconfigured).
 - Create accepts only `name, phone, email?, village?, district?, state?, latitude?, longitude?` (`kycStatus` defaults to `PENDING`). Update additionally accepts `kycStatus`. `id/createdAt/updatedAt/trustScore` are rejected.
 - Errors: `400` validation, `404` not found, `409` duplicate email, via central error handler.
 
+## Crop Listing API (B1 Task 3)
+
+Bridge between Farmer and the future market/mandi + matching systems. Every listing belongs to an existing farmer (`farmerId`); mandi/market-price integration is NOT implemented yet.
+
+Requires live `DATABASE_URL` (endpoints return `503` when unconfigured).
+
+| Method | Endpoint | Success |
+|---|---|---|
+| `POST` | `/api/crop-listings` | `201 { success: true, data }` |
+| `GET` | `/api/crop-listings?page=1&limit=20` | `200 { success: true, data, pagination }` |
+| `GET` | `/api/crop-listings/:id` | `200 { success: true, data }` (includes limited `farmer: { id, name, phone, village, district, state }`) |
+| `PATCH` | `/api/crop-listings/:id` | `200 { success: true, data }` |
+| `DELETE` | `/api/crop-listings/:id` | `200 { success: true, data }` (farmer untouched) |
+
+- Create accepts only `farmerId, cropName, quantity, unit, expectedPrice, availableFrom?, status?, latitude?, longitude?` (`status` defaults to `OPEN`). Update accepts the same fields, all optional; changing `farmerId` re-verifies the new farmer. `id/createdAt/updatedAt` and unknown fields (e.g. `marketPrice`, `buyerId`) are rejected.
+- Validation: `quantity > 0`, `expectedPrice >= 0`, `status ∈ OPEN | MATCHED | IN_PROGRESS | COMPLETED | CANCELLED | EXPIRED`, `availableFrom` valid date, lat ±90 / lng ±180.
+- Pagination: defaults `page=1, limit=20`, max `limit=100`; invalid values → `400`; stable `createdAt desc` ordering.
+- Errors: `400` validation, `404` listing/farmer not found, `409` unique conflict, via central error handler (no raw Prisma errors).
+
+Example create:
+
+```bash
+curl -X POST http://localhost:8000/api/crop-listings \
+  -H "Content-Type: application/json" \
+  -d '{"farmerId":"<farmer-id>","cropName":"Wheat","quantity":10,"unit":"quintal","expectedPrice":2200}'
+```
+
 ## Notes for next modules
 
 - Matching, maps, auth are NOT implemented here — only schema + validation placeholders.
