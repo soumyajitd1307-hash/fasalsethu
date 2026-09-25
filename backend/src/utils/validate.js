@@ -324,8 +324,16 @@ module.exports = {
   buyerRequirementUpdateSchema,
   marketPriceQuerySchema,
   marketPriceContextSchema,
+  dealStatusSchema,
+  dealCreateSchema,
+  dealStatusUpdateSchema,
+  dealCancelSchema,
+  dealQuerySchema,
+  notificationQuerySchema,
+  notificationCreateSchema,
   paginationQuerySchema,
   validateBody,
   validateQuery,
 };
+
 
