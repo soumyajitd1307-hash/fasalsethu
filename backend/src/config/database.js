@@ -35,7 +35,7 @@ async function checkConnection(timeoutMs = 3000) {
 
 async function disconnect() {
   if (prisma) {
-    await prisma.disconnect();
+    await prisma.$disconnect();
     prisma = null;
   }
 }

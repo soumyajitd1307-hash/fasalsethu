@@ -112,10 +112,9 @@ async function importRecords(rawRecords, options = {}) {
       }
       stats.valid += 1;
       const key = dedupKey(result.record);
-      if (seen.has(key)) {
-        stats.duplicates += 1;
-        return;
-      }
+      // Within a file, the LAST row wins (later rows are corrections of
+      // earlier ones); the replaced occurrence counts as a duplicate.
+      if (seen.has(key)) stats.duplicates += 1;
       seen.set(key, result.record);
     });
     if (seen.size === 0) continue;
