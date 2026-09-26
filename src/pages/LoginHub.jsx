@@ -116,7 +116,7 @@ export default function LoginHub() {
                 <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
               </Link>
               <div className="mt-3 text-center">
-                <Link to="/seller" className="text-xs font-semibold text-green-700 hover:underline">
+                <Link to="/farmer-register" className="text-xs font-semibold text-green-700 hover:underline">
                   New farmer? Register for free →
                 </Link>
               </div>
@@ -178,8 +178,8 @@ export default function LoginHub() {
                 <ArrowRight className="w-4 h-4 text-emerald-400 group-hover/btn:translate-x-1 transition-transform" />
               </Link>
               <div className="mt-3 text-center">
-                <Link to="/buyer" className="text-xs font-semibold text-gray-600 hover:text-black hover:underline">
-                  Need bulk sourcing? View pricing & solutions →
+                <Link to="/buyer-register" className="text-xs font-semibold text-gray-600 hover:text-black hover:underline">
+                  New bulk buyer? Register for free →
                 </Link>
               </div>
             </div>

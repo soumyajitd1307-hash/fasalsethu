@@ -1,0 +1,239 @@
+// FasalSethu backend — Prisma schema (foundation, Backend Member 1).
+// Tables: Farmer, Buyer, CropListing, BuyerRequirement.
+// Relations: Farmer 1—N CropListing, Buyer 1—N BuyerRequirement.
+// NOTE: matching / maps / auth are intentionally NOT modelled here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Farmer {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String
+  email      String?  @unique
+  kisanId    String?  @unique
+  village    String?
+  district   String?
+  state      String?
+  latitude   Float?
+  longitude  Float?
+  kycStatus  String   @default("PENDING")
+  trustScore Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  cropListings CropListing[]
+  deals        Deal[]
+
+  @@index([phone])
+  @@index([district, state])
+  @@map("farmers")
+}
+
+model Buyer {
+  id          String   @id @default(cuid())
+  name        String
+  companyName String?
+  phone       String
+  email       String?  @unique
+  gstin       String?  @unique
+  buyerType   String?
+  village     String?
+  district    String?
+  state       String?
+  latitude    Float?
+  longitude   Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirements BuyerRequirement[]
+  deals        Deal[]
+
+  @@index([phone])
+  @@index([district, state])
+  @@map("buyers")
+}
+
+model CropListing {
+  id               String    @id @default(cuid())
+  farmerId         String
+  farmer           Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  cropName         String
+  quantity         Float
+  unit             String
+  minExpectedPrice Float
+  maxExpectedPrice Float
+  availableFrom    DateTime?
+  status           String    @default("OPEN")
+  latitude         Float?
+  longitude        Float?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([farmerId])
+  @@index([cropName, status])
+  @@map("crop_listings")
+}
+
+model BuyerRequirement {
+  id               String    @id @default(cuid())
+  buyerId          String
+  buyer            Buyer     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  cropName         String
+  requiredQuantity Float
+  unit             String
+  targetPrice      Float
+  neededBy         DateTime?
+  latitude         Float?
+  longitude        Float?
+  status           String    @default("OPEN")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([buyerId])
+  @@index([cropName, status])
+  @@map("buyer_requirements")
+}
+
+// Government mandi market-price observation (B1 Task 4).
+// MARKET CONTEXT only — never the farmer's selling range (crop_listings).
+// Normalized from Agmarknet daily mandi records (data.gov.in:
+// State/District/Market/Commodity/Variety/Grade/Arrival_Date/
+// Min_Price/Max_Price/Modal_Price, Rs/quintal). No DB-level unique
+// constraint: the source itself can repeat a natural key (corrections),
+// so deduplication happens in the ingestion service instead.
+model MarketPrice {
+  id             String   @id @default(cuid())
+  commodity      String
+  variety        String?
+  grade          String?
+  market         String
+  district       String?
+  state          String
+  minPrice       Float
+  maxPrice       Float
+  modalPrice     Float?
+  unit           String   @default("quintal")
+  observedAt     DateTime
+  source         String   @default("agmarknet")
+  sourceRecordId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([commodity, observedAt])
+  @@index([state, district, observedAt])
+  @@index([market, observedAt])
+  @@map("market_prices")
+}
+
+// Deal / Transaction entity (B3 Task).
+// Represents an agreed, binding contract between a Farmer and Buyer.
+// Lifecycle: ACCEPTED -> CONFIRMED -> IN_PROGRESS -> COMPLETED (or CANCELLED).
+model Deal {
+  id                 String    @id @default(cuid())
+  offerId            String    @unique
+  farmerId           String
+  buyerId            String
+  cropId             String?
+  cropName           String
+  quantity           Float
+  unit               String    @default("quintal")
+  agreedPrice        Float
+  totalAmount        Float
+  pickupLocation     String?
+  deliveryLocation   String?
+  status             String    @default("ACCEPTED")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  farmer             Farmer    @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  buyer              Buyer     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  notifications      Notification[]
+
+  @@index([farmerId])
+  @@index([buyerId])
+  @@index([status])
+  @@map("deals")
+}
+
+// In-app notifications for deals and offers (B3 Task).
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  userRole  String?
+  type      String
+  title     String
+  message   String
+  dealId    String?
+  offerId   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deal      Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// First-party login credential. Backs POST /api/auth/login and
+// POST /api/auth/register: one row per account, written and read by
+// src/services/authService.js.
+// A single row represents EITHER a Farmer OR a Buyer, so `userId` holds an
+// existing Farmer.id / Buyer.id cuid with deliberately NO foreign key: the two
+// live in different tables and one of them must always exist.
+// `userId` is the value issued as the JWT `sub` claim, because that is what
+// dealScopeFor / authorizeDealParticipant and the notification lookups already
+// compare against. Never repoint it at an external identity-provider subject.
+// `passwordHash` holds a scrypt digest (see src/auth/password.js), never a
+// plaintext password. `identifierNormalized` is the unique lookup key, and
+// `failedAttempts`/`lockedUntil` back the bounded account lockout.
+model AuthAccount {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  role                 String
+  identifier           String
+  identifierNormalized String    @unique
+  passwordHash         String
+  status               String    @default("ACTIVE")
+  failedAttempts       Int       @default(0)
+  lockedUntil          DateTime?
+  lastLoginAt          DateTime?
+  emailVerifiedAt      DateTime?
+  phoneVerifiedAt      DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([role, identifierNormalized])
+  @@map("auth_accounts")
+}
+
+// Rotating refresh tokens (schema only — no auth behaviour yet).
+// Only the digest is stored, so a database leak cannot be replayed as a token.
+// `familyId` groups every token descended from one login, which is what makes
+// reuse of an already-rotated token detectable.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  role      String
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}

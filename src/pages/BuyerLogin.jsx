@@ -4,9 +4,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Building2, ShieldCheck, Mail, Lock, Eye, EyeOff,
   ArrowRight, ArrowLeft, CheckCircle2, Briefcase, FileText,
-  Sprout, Award, ChevronRight, Phone, User, MapPin, Package, Wheat, Plus, X
+  Sprout, Award, ChevronRight, Phone, User, MapPin, Package, Wheat, Plus, X, AlertCircle
 } from 'lucide-react'
-import { registerBuyer, loginBuyer } from '../services/buyerDatabase'
+import { useAuth } from '../context/AuthContext'
+// `registerBuyer` is retained ONLY as a client-side cache write so the
+// farmer-side buyer matching (GoogleMapBuyerRadar / getAllBuyers) keeps seeing
+// buyers registered through this page. It is not an authentication path:
+// credentials are always verified by the backend via AuthContext.
+import { registerBuyer } from '../services/buyerDatabase'
 
 // ── Small reusable field ─────────────────────────────────────────────
 function Field({ label, icon: Icon, error, children }) {
@@ -90,6 +95,7 @@ function CropTagInput({ crops, onChange }) {
 
 // ── Registration form ────────────────────────────────────────────────
 function RegisterForm({ onSuccess }) {
+  const { register } = useAuth()
   const [form, setForm] = useState({
     name: '',
     companyName: '',
@@ -116,7 +122,7 @@ function RegisterForm({ onSuccess }) {
     if (!form.email.trim()) e.email = 'Email is required'
     else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Invalid email format'
     if (!form.phone.trim()) e.phone = 'Phone number is required'
-    if (!form.password || form.password.length < 6) e.password = 'Password must be at least 6 characters'
+    if (!form.password || form.password.length < 8) e.password = 'Password must be at least 8 characters'
     if (form.cropsRequired.length === 0) e.cropsRequired = 'Add at least one crop'
     if (!form.requiredQuantity || Number(form.requiredQuantity) <= 0)
       e.requiredQuantity = 'Enter a valid quantity'
@@ -132,12 +138,53 @@ function RegisterForm({ onSuccess }) {
       return
     }
     setIsLoading(true)
+    setErrors({})
     try {
-      const buyer = await registerBuyer(form)
-      onSuccess(buyer)
+      // Real registration: the backend creates the AuthAccount and the Buyer
+      // row. `identifier` is the corporate email, which the backend normalises
+      // and enforces as globally unique.
+      const created = await register('buyer', {
+        identifier: form.email.trim(),
+        password: form.password,
+        profile: {
+          name: form.name.trim(),
+          companyName: form.companyName.trim() || undefined,
+          phone: form.phone.trim(),
+          email: form.email.trim(),
+        },
+      })
+
+      // Mirror the profile into the local buyer registry so the farmer-side
+      // buyer matching keeps working. This is a cache write only; if it fails
+      // the account above is still real and usable.
+      try {
+        await registerBuyer(form)
+      } catch (cacheErr) {
+        console.warn('Buyer registered but local buyer cache write failed:', cacheErr)
+      }
+
+      onSuccess(created.profile || { name: form.name.trim(), companyName: form.companyName.trim() })
     } catch (err) {
-      console.error(err)
-      setErrors({ form: 'Registration failed. Please try again.' })
+      console.error('Registration failed:', err)
+      const details = err?.data?.details
+      if (details && typeof details === 'object') {
+        const mapped = {}
+        for (const [k, msgs] of Object.entries(details)) {
+          if (Array.isArray(msgs) && msgs.length) mapped[k] = msgs[0]
+        }
+        if (Object.keys(mapped).length) {
+          setErrors(mapped)
+          setIsLoading(false)
+          return
+        }
+      }
+      if (err?.status === 409) {
+        setErrors({ form: 'An account with that email or GSTIN already exists.' })
+      } else if (err?.status === 429) {
+        setErrors({ form: 'Too many attempts. Please try again shortly.' })
+      } else {
+        setErrors({ form: err?.message || 'Registration failed. Please try again.' })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -298,6 +345,7 @@ function RegisterForm({ onSuccess }) {
 
 // ── Login form ───────────────────────────────────────────────────────
 function LoginForm({ onSuccess }) {
+  const { login } = useAuth()
   const [authType, setAuthType] = useState('email')
   const [email, setEmail] = useState('')
   const [gstin, setGstin] = useState('')
@@ -306,24 +354,49 @@ function LoginForm({ onSuccess }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    // The email/GSTIN toggle is only an input affordance: both are sent as the
+    // single `identifier` field, which the backend resolves for the buyer role.
+    const identifier = (authType === 'email' ? email : gstin).trim()
+    if (!identifier || !password) {
+      setError(
+        !identifier
+          ? authType === 'email'
+            ? 'Enter your business email'
+            : 'Enter your GSTIN'
+          : 'Enter your password'
+      )
+      return
+    }
+
     setIsLoading(true)
-
-    // Try real DB login first
-    const loginId = authType === 'email' ? email : gstin
-    const buyer = loginBuyer(loginId, password)
-
-    setTimeout(() => {
-      setIsLoading(false)
-      if (buyer) {
-        onSuccess(buyer)
+    try {
+      // Real authentication: AuthContext calls POST /api/auth/login with
+      // role 'buyer', adopts the returned session, and revalidates it via
+      // /api/auth/me. There is no local fallback and no demo path.
+      const profile = await login('buyer', identifier, password)
+      onSuccess(profile)
+    } catch (err) {
+      console.error('Login failed:', err)
+      if (err?.status === 429) {
+        const retry = err.retryAfterSeconds
+        setError(
+          retry
+            ? `Too many attempts. Please try again in ${retry} seconds.`
+            : 'Too many attempts. Please try again shortly.'
+        )
+      } else if (err?.status === 401) {
+        setError(err?.message || 'Invalid credentials.')
+      } else if (err?.status === 503) {
+        setError('The service is temporarily unavailable. Please try again later.')
       } else {
-        // Fallback: simulate success for demo (any credentials work)
-        onSuccess({ name: 'Guest Buyer', companyName: 'Demo Account' })
+        setError(err?.message || 'Unable to sign in right now. Please try again.')
       }
-    }, 700)
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -462,10 +535,13 @@ export default function BuyerLogin() {
   const [success, setSuccess] = useState(false)
   const [successBuyer, setSuccessBuyer] = useState(null)
 
-  const handleSuccess = (buyer) => {
-    setSuccessBuyer(buyer)
+  const handleSuccess = (profile) => {
+    // Reached only after the backend has authenticated the buyer (or created
+    // the account). The short delay below exists purely so the success screen
+    // is visible; it plays no part in authentication.
+    setSuccessBuyer(profile)
     setSuccess(true)
-    setTimeout(() => navigate('/buyer'), 1200)
+    setTimeout(() => navigate('/buyer', { replace: true }), 1200)
   }
 
   return (
