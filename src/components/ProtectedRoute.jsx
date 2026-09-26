@@ -18,8 +18,8 @@ import { useAuth } from '../context/AuthContext'
  * not an authorization control.
  */
 
-// Where each role belongs. `/buyer` is a public marketing page today, so it is
-// the natural landing spot for a signed-in buyer.
+// Where each role belongs. A role that is sent to the wrong portal is returned
+// to its own, so this must stay in step with the `allow` lists in App.jsx.
 const ROLE_HOME = {
   farmer: '/seller',
   buyer: '/buyer',

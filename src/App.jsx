@@ -56,8 +56,15 @@ function AnimatedRoutes() {
           <Route path="/login/buyer" element={<BuyerLogin />} />
           <Route path="/farmer-register" element={<FarmerRegister />} />
           <Route path="/buyer-register" element={<BuyerRegister />} />
-          {/* /buyer is a public marketing page today, so it stays unguarded. */}
-          <Route path="/buyer" element={<Buyer />} />
+          {/* Buyer-only: the Buyer Portal and its buyer-specific features. */}
+          <Route
+            path="/buyer"
+            element={
+              <ProtectedRoute allow={['buyer']}>
+                <Buyer />
+              </ProtectedRoute>
+            }
+          />
           {/* Farmer-only: /seller renders the live FarmerDashboard. */}
           <Route
             path="/seller"
