@@ -298,7 +298,7 @@ const buyerProcess = [
 ]
 
 const testimonials = [
-  { name:'Anjali Exports',    role:'Onion Exporter, Pune',       rating:5, delay:0,    text:'We source 500 tonnes of onion monthly. AgriBridge cut our procurement time from 2 weeks to 3 days. Farmer verification gives us complete confidence.' },
+  { name:'Anjali Exports',    role:'Onion Exporter, Pune',       rating:5, delay:0,    text:'We source 500 tonnes of onion monthly. Fasal Sethu cut our procurement time from 2 weeks to 3 days. Farmer verification gives us complete confidence.' },
   { name:'FreshMart Retail',  role:'Supermarket Chain, Delhi',   rating:5, delay:0.1,  text:'Direct farm-to-shelf sourcing saved us 22% on procurement costs. We get fresher produce and pass savings to customers. Win-win.' },
   { name:'Bharat Agro Trading',role:'Commodity Trader, Mumbai',  rating:5, delay:0.2,  text:'The real-time market intelligence alone is worth it. I can spot arbitrage opportunities across mandis before anyone else.' },
 ]
@@ -489,7 +489,7 @@ export default function Buyer() {
         <div className="max-w-6xl mx-auto px-6">
           <p className="text-green-600 text-center text-xs font-semibold uppercase tracking-widest mb-3">Buyer Stories</p>
           <h2 className="section-title text-gradient">Trusted by Industry Leaders</h2>
-          <p className="section-subtitle">From small traders to national exporters — buyers across India rely on AgriBridge.</p>
+          <p className="section-subtitle">From small traders to national exporters — buyers across India rely on Fasal Sethu.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {testimonials.map(t => <BuyerTestimonialCard key={t.name} {...t} />)}
           </div>

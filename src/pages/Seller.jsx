@@ -577,7 +577,7 @@ function FAQ({ q, a, delay }) {
 
 /* ── Data ── */
 const benefits = [
-  { icon: DollarSign, title: 'Higher Net Returns',    stat: '+32%', delay: 0,    accent: 'bg-green-600',   desc: 'Farmers using AgriBridge earn an average 32% more per quintal by eliminating middlemen.' },
+  { icon: DollarSign, title: 'Higher Net Returns',    stat: '+32%', delay: 0,    accent: 'bg-green-600',   desc: 'Farmers using Fasal Sethu earn an average 32% more per quintal by eliminating middlemen.' },
   { icon: Clock,      title: 'Sell in 48 Hours',      stat: '48h',  delay: 0.08, accent: 'bg-sky-500',     desc: 'From listing your crop to completing a verified transaction in as little as 48 hours.' },
   { icon: ShieldCheck,title: 'Zero Fraud Risk',       stat: '100%', delay: 0.16, accent: 'bg-emerald-600', desc: 'All buyers are KYC-verified. Every transaction is digitally recorded with verification status.' },
   { icon: MapPin,     title: 'Hyperlocal Matching',   stat: '<50km',delay: 0.24, accent: 'bg-teal-600',    desc: 'Our geo-matching algorithm finds serious buyers within your preferred distance radius.' },
@@ -595,7 +595,7 @@ const tools = [
 ]
 
 const faqs = [
-  { q: 'Is AgriBridge free for farmers?',         a: 'Yes — registration and listing is completely free. We charge a small success fee only on completed transactions.' },
+  { q: 'Is Fasal Sethu free for farmers?',         a: 'Yes — registration and listing is completely free. We charge a small success fee only on completed transactions.' },
   { q: 'How do I know a buyer is genuine?',        a: 'All buyers go through KYC verification. You can view their transaction history, ratings, and verification status before agreeing to a deal.' },
   { q: 'What crops can I list?',                   a: 'Any food crop, cash crop, or horticulture product. We currently support 200+ crop varieties with live market pricing.' },
   { q: 'How is the net return calculated?',        a: 'We fetch your crop price at each nearby market, deduct estimated transport cost based on distance, and show the actual amount you take home.' },

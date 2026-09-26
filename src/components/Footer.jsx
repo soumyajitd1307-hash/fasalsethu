@@ -82,7 +82,7 @@ export default function Footer() {
                 <Sprout className="w-6 h-6 text-white" />
               </div>
               <div>
-                <span className="font-display font-bold text-2xl text-green-300">AgriBridge</span>
+                <span className="font-display font-bold text-2xl text-green-300">Fasal Sethu</span>
                 <p className="text-green-600 text-xs">Farm · Market · Connect</p>
               </div>
             </Link>
@@ -95,7 +95,7 @@ export default function Footer() {
 
             <div className="space-y-2 mb-6">
               {[
-                { Icon: Mail,  text: 'support@agribridge.in' },
+                { Icon: Mail,  text: 'support@fasalsethu.in' },
                 { Icon: Phone, text: '+91 1800 XXX XXXX (Toll Free)' },
                 { Icon: MapPin,text: 'New Delhi, India 110001' },
               ].map(({ Icon, text }) => (
@@ -150,7 +150,7 @@ export default function Footer() {
                         flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-green-600">
             <Leaf className="w-4 h-4 text-green-500" />
-            <span>© 2026 AgriBridge. Made with 💚 for India's Farmers.</span>
+            <span>© 2026 Fasal Sethu. Made with 💚 for India's Farmers.</span>
           </div>
           <div className="flex items-center gap-4 text-xs text-green-700">
             <span>SIH26132 — Smart India Hackathon</span>
