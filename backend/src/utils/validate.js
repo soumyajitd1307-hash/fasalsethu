@@ -113,7 +113,13 @@ const gstinField = z
   )
   .optional()
   .or(z.literal(''))
-  .transform((v) => (v === '' ? undefined : v.toUpperCase()));
+  // `null`/`undefined` reach this transform whenever the optional GSTIN is
+  // omitted — a buyer may register with an email or phone instead. Only the
+  // empty string reaches the `v === ''` branch, so the nullish cases must be
+  // handled explicitly or `v.toUpperCase()` throws. Because this is a
+  // ZodEffects, such a throw escapes safeParse and surfaces as a 500 rather
+  // than a 400 validation error.
+  .transform((v) => (v == null || v === '' ? undefined : v.toUpperCase()));
 
 const farmerCreateSchema = z
   .object({
