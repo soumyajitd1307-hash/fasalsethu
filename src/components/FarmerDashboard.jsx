@@ -6,10 +6,24 @@ import {
   Filter, CheckCircle2, AlertCircle, Sparkles, ChevronRight,
 } from 'lucide-react'
 import { marketplaceService } from '../services/marketplaceService'
+import { getAllBuyers } from '../services/buyerDatabase'
 import NearbyMapInterface from './NearbyMapInterface'
 import PriceComparisonMatrix from './PriceComparisonMatrix'
 import ConnectionRequestModal from './ConnectionRequestModal'
 import ConnectionStatusTracker from './ConnectionStatusTracker'
+
+// Haversine great-circle distance in km — used to compute registered
+// buyer distances from the farmer's current location.
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371
+  const toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
 
 export default function FarmerDashboard({ customSearch = null, onResetCustomSearch = null }) {
   const [data, setData] = useState(null)
@@ -75,11 +89,59 @@ export default function FarmerDashboard({ customSearch = null, onResetCustomSear
     ])
       .then(([dashRes, buyersRes]) => {
         setData(dashRes)
-        setBuyers(buyersRes)
-        if (buyersRes && buyersRes.length > 0) {
-          setSelectedBuyerId(prev => {
-            const stillExists = buyersRes.some(b => b.id === prev)
-            return stillExists ? prev : buyersRes[0].id
+
+        // ── Merge registered buyers from localStorage DB ─────────────
+        // Convert each registered buyer to the format GoogleMapBuyerRadar
+        // expects, computing actual Haversine distance from farmer coords.
+        const registeredRaw = getAllBuyers()
+        const registeredConverted = registeredRaw.map((b) => {
+          const dist = Math.round(
+            haversineKm(
+              activeFarmerCoords.lat,
+              activeFarmerCoords.lng,
+              b.location.latitude,
+              b.location.longitude
+            ) * 10
+          ) / 10
+          return {
+            id: b.buyerId,
+            name: b.companyName ? `${b.name} (${b.companyName})` : b.name,
+            type: 'Registered Buyer',
+            location: b.location.address,
+            // Explicit lat/lng so GoogleMapBuyerRadar places marker precisely
+            latitude: b.location.latitude,
+            longitude: b.location.longitude,
+            distance: dist,
+            distanceKm: dist,
+            crops: b.cropsRequired || [],
+            interestedCrops: b.cropsRequired || [],
+            offeredPrices: {},
+            offeredPricePerQtl: {},
+            trustScore: 90,
+            freightStatus: false,
+            transportProvided: false,
+            verified: true,
+            companyName: b.companyName,
+            phone: b.phone,
+            email: b.email,
+            requiredQuantity: b.requiredQuantity,
+            unit: b.unit,
+          }
+        })
+
+        // Deduplicate: skip any registered buyer whose ID is already in
+        // the mock/service buyers list.
+        const existingIds = new Set((buyersRes || []).map((b) => b.id))
+        const newRegistered = registeredConverted.filter(
+          (b) => !existingIds.has(b.id)
+        )
+
+        const merged = [...(buyersRes || []), ...newRegistered]
+        setBuyers(merged)
+        if (merged.length > 0) {
+          setSelectedBuyerId((prev) => {
+            const stillExists = merged.some((b) => b.id === prev)
+            return stillExists ? prev : merged[0].id
           })
         } else {
           setSelectedBuyerId(null)
