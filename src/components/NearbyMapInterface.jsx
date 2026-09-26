@@ -11,6 +11,7 @@ export default function NearbyMapInterface({
   buyers = [],
   activeBuyerId = null,
   farmerLocation = 'Dindori, Nashik (20.20° N, 73.83° E)',
+  farmerCoords: externalFarmerCoords = null,
   onSelectBuyer,
   onConnectBuyer,
   selectedRadius = 50,
@@ -24,13 +25,23 @@ export default function NearbyMapInterface({
 
   // Extract or parse farmer GPS coordinates
   const farmerCoords = useMemo(() => {
+    if (externalFarmerCoords && typeof externalFarmerCoords.lat === 'number' && typeof externalFarmerCoords.lng === 'number') {
+      return externalFarmerCoords
+    }
     const latMatch = farmerLocation.match(/(\d+\.?\d*)\s*°?\s*N/i)
     const lngMatch = farmerLocation.match(/(\d+\.?\d*)\s*°?\s*E/i)
     if (latMatch && lngMatch) {
       return { lat: parseFloat(latMatch[1]), lng: parseFloat(lngMatch[1]) }
     }
     return { lat: 20.20, lng: 73.83 }
-  }, [farmerLocation])
+  }, [farmerLocation, externalFarmerCoords])
+
+  // When external coords change from manual search, automatically switch viewMode to GOOGLE_MAP
+  React.useEffect(() => {
+    if (externalFarmerCoords) {
+      setViewMode('GOOGLE_MAP')
+    }
+  }, [externalFarmerCoords])
 
   const currentRadius = onRadiusChange ? selectedRadius : internalRadius
 
@@ -52,7 +63,7 @@ export default function NearbyMapInterface({
   const activeBuyer = buyers.find(b => b.id === currentActiveId) || filteredBuyers[0] || buyers[0]
 
   return (
-    <div className="bg-white border border-green-100 rounded-3xl shadow-sm overflow-hidden">
+    <div id="radar-map" className="bg-white border border-green-100 rounded-3xl shadow-sm overflow-hidden scroll-mt-24">
       {/* Header Controls */}
       <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

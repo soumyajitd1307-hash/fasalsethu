@@ -163,6 +163,17 @@ export default function GoogleMapBuyerRadar({
     }
   }, [mapTheme])
 
+  // ── Sync with external farmerCoords prop updates (manual search) ──
+  useEffect(() => {
+    if (farmerCoords && typeof farmerCoords.lat === 'number' && typeof farmerCoords.lng === 'number') {
+      setLiveFarmerCoords(farmerCoords)
+      if (mapRef.current) {
+        mapRef.current.panTo(farmerCoords)
+        mapRef.current.setZoom(currentRadius <= 25 ? 11 : currentRadius <= 50 ? 10 : 9)
+      }
+    }
+  }, [farmerCoords, currentRadius])
+
   // ── 3. Render Farm Hub Marker & Radius Circle ──
   useEffect(() => {
     if (!mapRef.current || !window.google?.maps) return
@@ -187,24 +198,27 @@ export default function GoogleMapBuyerRadar({
           anchor: new window.google.maps.Point(22, 50),
         },
       })
-
-      farmMarkerRef.current.addListener('click', () => {
-        if (!infoWindowRef.current) return
-        infoWindowRef.current.setContent(`
-          <div style="font-family: system-ui, sans-serif; padding: 6px; max-width: 220px; color: #111827;">
-            <div style="font-weight: 800; font-size: 13px; color: #047857; margin-bottom: 2px;">🏡 Your Farm Hub</div>
-            <div style="font-size: 11px; color: #374151; margin-bottom: 4px;">${farmerLocationText}</div>
-            <div style="font-size: 10px; color: #6b7280; font-family: monospace;">GPS: ${liveFarmerCoords.lat.toFixed(3)}° N, ${liveFarmerCoords.lng.toFixed(3)}° E</div>
-            <div style="margin-top: 6px; font-size: 10px; background: #ecfdf5; color: #065f46; padding: 2px 6px; border-radius: 4px; display: inline-block; font-weight: 600;">
-              Radius: ${currentRadius} km Active
-            </div>
-          </div>
-        `)
-        infoWindowRef.current.open(mapRef.current, farmMarkerRef.current)
-      })
     } else {
       farmMarkerRef.current.setPosition(liveFarmerCoords)
+      farmMarkerRef.current.setTitle(`Your Farm Hub (${farmerLocationText})`)
     }
+
+    // Always update click listener with latest location data
+    window.google.maps.event.clearListeners(farmMarkerRef.current, 'click')
+    farmMarkerRef.current.addListener('click', () => {
+      if (!infoWindowRef.current) return
+      infoWindowRef.current.setContent(`
+        <div style="font-family: system-ui, sans-serif; padding: 6px; max-width: 220px; color: #111827;">
+          <div style="font-weight: 800; font-size: 13px; color: #047857; margin-bottom: 2px;">🏡 Your Farm Hub</div>
+          <div style="font-size: 11px; color: #374151; margin-bottom: 4px;">${farmerLocationText}</div>
+          <div style="font-size: 10px; color: #6b7280; font-family: monospace;">GPS: ${liveFarmerCoords.lat.toFixed(3)}° N, ${liveFarmerCoords.lng.toFixed(3)}° E</div>
+          <div style="margin-top: 6px; font-size: 10px; background: #ecfdf5; color: #065f46; padding: 2px 6px; border-radius: 4px; display: inline-block; font-weight: 600;">
+            Radius: ${currentRadius} km Active
+          </div>
+        </div>
+      `)
+      infoWindowRef.current.open(mapRef.current, farmMarkerRef.current)
+    })
 
     // Geodesic Radius Circle
     if (!circleRef.current) {
@@ -456,6 +470,16 @@ export default function GoogleMapBuyerRadar({
         >
           🗺️ Standard
         </button>
+      </div>
+
+      {/* Top Center Location Indicator */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 hidden md:flex items-center gap-2 bg-black/80 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-emerald-500/40 text-xs shadow-xl pointer-events-none">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-gray-300">Map Centered:</span>
+        <strong className="text-white font-medium truncate max-w-[180px]">{farmerLocationText}</strong>
+        <span className="text-[10px] text-emerald-400 font-mono">
+          ({liveFarmerCoords.lat.toFixed(2)}°, {liveFarmerCoords.lng.toFixed(2)}°)
+        </span>
       </div>
 
       {/* Top Right Action: Recenter & GPS */}

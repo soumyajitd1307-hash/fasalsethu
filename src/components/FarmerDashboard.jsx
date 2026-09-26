@@ -11,7 +11,7 @@ import PriceComparisonMatrix from './PriceComparisonMatrix'
 import ConnectionRequestModal from './ConnectionRequestModal'
 import ConnectionStatusTracker from './ConnectionStatusTracker'
 
-export default function FarmerDashboard() {
+export default function FarmerDashboard({ customSearch = null, onResetCustomSearch = null }) {
   const [data, setData] = useState(null)
   const [buyers, setBuyers] = useState([])
   const [activeTab, setActiveTab] = useState('INVENTORY') // 'INVENTORY', 'DISCOVERY', 'COMPARISON', 'DEALS'
@@ -41,6 +41,19 @@ export default function FarmerDashboard() {
     location: 'Dindori, Nashik',
   })
 
+  // Synchronize with customSearch from CropListingForm
+  useEffect(() => {
+    if (customSearch) {
+      setActiveTab('DISCOVERY')
+      if (customSearch.crop) {
+        setCropFilter(customSearch.crop)
+      }
+    }
+  }, [customSearch])
+
+  const activeFarmerCoords = customSearch?.coords || { lat: 20.20, lng: 73.83 }
+  const activeFarmerLocation = customSearch?.displayName || customSearch?.location || `${data?.farmer?.village || 'Dindori'}, ${data?.farmer?.district || 'Nashik'}`
+
   // Load dashboard data with structured query
   function loadDashboard() {
     setLoading(true)
@@ -52,8 +65,8 @@ export default function FarmerDashboard() {
       radius: maxDistFilter,
       kycVerified: verifiedOnly,
       sortBy,
-      latitude: 20.20,
-      longitude: 73.83,
+      latitude: activeFarmerCoords.lat,
+      longitude: activeFarmerCoords.lng,
     }
 
     Promise.all([
@@ -84,7 +97,7 @@ export default function FarmerDashboard() {
 
   useEffect(() => {
     loadDashboard()
-  }, [cropFilter, maxDistFilter, verifiedOnly, sortBy])
+  }, [cropFilter, maxDistFilter, verifiedOnly, sortBy, customSearch])
 
   // Handle Add Crop Listing
   async function handleAddCrop(e) {
@@ -337,6 +350,43 @@ export default function FarmerDashboard() {
         {/* Tab 2: Buyer Discovery & Radar Map */}
         {activeTab === 'DISCOVERY' && (
           <div className="space-y-6">
+            {/* Custom Search Live Match Banner */}
+            {customSearch && (
+              <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-800 via-green-700 to-teal-800 text-white shadow-lg border border-emerald-500/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-2xl shrink-0 shadow-inner">
+                    🗺️
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-400 text-emerald-950 shadow-xs">
+                        LIVE GOOGLE MAP LINKED
+                      </span>
+                      <span className="text-xs text-emerald-200 font-mono">
+                        GPS: {activeFarmerCoords.lat.toFixed(3)}° N, {activeFarmerCoords.lng.toFixed(3)}° E
+                      </span>
+                    </div>
+                    <h4 className="font-display font-bold text-base sm:text-lg text-white">
+                      Live Buyer Radar for <span className="text-amber-300 font-extrabold">{customSearch.crop}</span> ({customSearch.qty} {customSearch.unit}) at <span className="text-emerald-200 underline font-semibold">{customSearch.location}</span>
+                    </h4>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start md:self-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onResetCustomSearch) onResetCustomSearch()
+                      setCropFilter('ALL')
+                    }}
+                    className="text-xs font-bold px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/20 transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Reset to Farm Hub
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Filter Toolbar */}
             <div className="p-4 rounded-2xl bg-white border border-green-100 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex flex-wrap items-center gap-3">
@@ -349,6 +399,9 @@ export default function FarmerDashboard() {
                     className="px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 font-medium focus:outline-none"
                   >
                     <option value="ALL">All Crops</option>
+                    {customSearch?.crop && !['Onion','Wheat','Tomato','Soybean','Maize'].includes(customSearch.crop) && (
+                      <option value={customSearch.crop}>✨ {customSearch.crop} (Searched)</option>
+                    )}
                     <option value="Onion">Onion</option>
                     <option value="Wheat">Wheat</option>
                     <option value="Tomato">Tomato</option>
@@ -403,7 +456,8 @@ export default function FarmerDashboard() {
             <NearbyMapInterface
               buyers={buyers}
               activeBuyerId={selectedBuyerId}
-              farmerLocation={`${farmer?.village || 'Dindori'}, ${farmer?.district || 'Nashik'}`}
+              farmerLocation={activeFarmerLocation}
+              farmerCoords={activeFarmerCoords}
               onSelectBuyer={b => setSelectedBuyerId(b.id)}
               onConnectBuyer={handleOpenConnectModal}
               selectedRadius={maxDistFilter === 'ALL' ? 100 : Number(maxDistFilter)}
