@@ -27,7 +27,14 @@ app.set('trust proxy', env.trustProxy);
 
 app.use(
   cors({
+    // An explicit allowlist of exact origins, never '*'. The auth flow sends a
+    // Bearer token and uses credentials, and a wildcard is invalid alongside
+    // them, so each matching origin is echoed back individually.
     origin: env.corsOrigins,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    // Content-Type carries the JSON body; Authorization carries the access
+    // token on protected routes.
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
   })
 );
