@@ -6,12 +6,15 @@ import {
   Sprout, TrendingUp, MapPin, ShieldCheck, BarChart3, Wheat,
   ArrowRight, CheckCircle2, ChevronRight, Star,
   DollarSign, Clock, Zap, Users, Package, Leaf,
-  Search, X, Navigation, RefreshCw, Check
+  Search, X, Navigation, RefreshCw, Check,
+  Building2, Phone, Mail, AlertCircle
 } from 'lucide-react'
 import GrassStrip from '../components/GrassStrip'
 import FloatingParticles from '../components/FloatingParticles'
 import FarmerDashboard from '../components/FarmerDashboard'
+import BuyerMatchMap from '../components/BuyerMatchMap'
 import { resolveLocationCoords, POPULAR_CROPS_LIST } from '../utils/geoLookup'
+import { searchBuyersByLocation } from '../services/buyerDatabase'
 
 /* ── Interactive crop listing form with Manual Crop Search & Live Map Redirect ── */
 function CropListingForm({ onGetBuyerMatches, isSearching = false }) {
@@ -608,7 +611,366 @@ const marketRows = [
   { crop:'🫘 Soybean',market:'Indore APMC',   price:'₹4,200', transport:'₹140', net:'₹4,060', change:'+0.9%', up:true,  status:'VERIFIED',         best:false },
 ]
 
+/* ── Buyer Location Matching Section ────────────────────────────────────────
+   Allows farmers to search for registered buyers by location.
+   Reads from the localStorage buyer database, applies Haversine radius search,
+   and renders results as cards + an interactive Google Map with markers.
+─────────────────────────────────────────────────────────────────────────── */
+function BuyerLocationMatchSection() {
+  const [location, setLocation] = useState('')
+  const [radiusKm, setRadiusKm] = useState(100)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searched, setSearched] = useState(false)
+  const [results, setResults] = useState([])
+  const [mapCenter, setMapCenter] = useState(null)
+  const [error, setError] = useState('')
+
+  const handleSearch = async (e) => {
+    if (e) e.preventDefault()
+    if (!location.trim()) {
+      setError('Please enter a location to search.')
+      return
+    }
+    setError('')
+    setIsSearching(true)
+    setSearched(false)
+    try {
+      const { buyers, center } = await searchBuyersByLocation(location.trim(), Number(radiusKm))
+      setResults(buyers)
+      setMapCenter(center)
+      setSearched(true)
+
+      // Scroll to results
+      setTimeout(() => {
+        document.getElementById('buyer-match-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 200)
+    } catch (err) {
+      console.error('Buyer search error:', err)
+      setError('Search failed. Please try again.')
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const radiusOptions = [
+    { label: '5 km', value: 5 },
+    { label: '10 km', value: 10 },
+    { label: '25 km', value: 25 },
+    { label: '50 km', value: 50 },
+    { label: '100 km', value: 100 },
+    { label: '200 km', value: 200 },
+    { label: 'Any', value: 5000 },
+  ]
+
+  return (
+    <section id="buyer-search" className="py-24 bg-white relative overflow-hidden">
+      <FloatingParticles count={14} />
+      <div className="max-w-6xl mx-auto px-6 relative z-10">
+
+        {/* Section header */}
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <span className="text-xs font-extrabold uppercase tracking-widest px-3 py-1 rounded-full
+                           bg-amber-100 text-amber-800">
+            Buyer Location Matching
+          </span>
+          <h2 className="section-title text-gradient mt-3">Find Registered Buyers Near You</h2>
+          <p className="section-subtitle">
+            Search our database of verified buyers by location. Buyers who have registered their
+            business address appear on the map — click a marker to view their details.
+          </p>
+        </div>
+
+        {/* Search form card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="bg-white border border-green-100 rounded-3xl p-6 sm:p-8 shadow-xl max-w-2xl mx-auto mb-10"
+        >
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-10 h-10 rounded-2xl bg-green-600 flex items-center justify-center shadow-md">
+              <Search className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-gray-900 text-base">Search Buyer Location</h3>
+              <p className="text-gray-400 text-xs">Enter your location to find buyers registered nearby</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSearch} className="space-y-4">
+            {/* Location input */}
+            <div>
+              <label className="text-gray-600 text-xs mb-1.5 block font-semibold">
+                Location
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-green-600" />
+                <input
+                  type="text"
+                  placeholder="e.g. Pune, Nashik, Delhi, Indore…"
+                  value={location}
+                  onChange={(e) => { setLocation(e.target.value); setError('') }}
+                  className="w-full pl-10 pr-4 py-3 rounded-2xl bg-green-50/70 border border-green-200
+                             text-gray-900 text-sm font-medium focus:outline-none focus:border-green-600
+                             focus:bg-white focus:ring-2 focus:ring-green-500/20 transition-all"
+                />
+              </div>
+              {error && (
+                <p className="text-red-500 text-xs flex items-center gap-1 mt-1">
+                  <AlertCircle className="w-3 h-3" /> {error}
+                </p>
+              )}
+            </div>
+
+            {/* Radius */}
+            <div>
+              <label className="text-gray-600 text-xs mb-1.5 block font-semibold">
+                Search Radius
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {radiusOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setRadiusKm(opt.value)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      radiusKm === opt.value
+                        ? 'bg-green-700 text-white shadow-sm'
+                        : 'bg-gray-100 hover:bg-green-100 text-gray-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Popular locations */}
+            <div>
+              <span className="text-[11px] text-gray-400 font-semibold block mb-1.5 uppercase">
+                Popular hubs:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {['Pune', 'Nashik', 'Indore', 'Delhi', 'Nagpur', 'Dindori'].map((loc) => (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => setLocation(loc)}
+                    className={`text-xs px-2.5 py-1 rounded-xl transition-all ${
+                      location.toLowerCase() === loc.toLowerCase()
+                        ? 'bg-green-700 text-white font-bold'
+                        : 'bg-gray-100 hover:bg-green-100 text-gray-700'
+                    }`}
+                  >
+                    {loc}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSearching}
+              className="w-full btn-primary py-3.5 flex items-center justify-center gap-2
+                         disabled:opacity-50 disabled:cursor-not-allowed shadow-md font-bold"
+            >
+              {isSearching ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Searching Buyers…</span>
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4" />
+                  <span>Search Buyers</span>
+                </>
+              )}
+            </button>
+          </form>
+        </motion.div>
+
+        {/* Results */}
+        <AnimatePresence>
+          {searched && (
+            <motion.div
+              id="buyer-match-results"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              {/* Result count badge */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  {results.length > 0 ? (
+                    <>
+                      <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                      <p className="text-green-700 font-bold text-sm">
+                        {results.length} registered buyer{results.length !== 1 ? 's' : ''} found within{' '}
+                        {radiusKm >= 5000 ? 'any distance' : `${radiusKm} km`} of{' '}
+                        <span className="text-gray-900">{mapCenter?.name || location}</span>
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                      <p className="text-amber-700 font-semibold text-sm">
+                        No buyers found within {radiusKm >= 5000 ? 'any distance' : `${radiusKm} km`} of{' '}
+                        <span className="text-gray-900">{location}</span>.
+                        Try increasing the search radius or a different location.
+                      </p>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={() => { setSearched(false); setResults([]); setMapCenter(null) }}
+                  className="text-xs text-gray-400 hover:text-gray-600 font-medium flex items-center gap-1"
+                >
+                  <X className="w-3.5 h-3.5" /> Clear
+                </button>
+              </div>
+
+              {results.length > 0 && (
+                <div className="grid grid-cols-1 gap-10">
+                  {/* Buyer cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {results.map((buyer, i) => (
+                      <motion.div
+                        key={buyer.buyerId}
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35, delay: i * 0.06 }}
+                        className="bg-white border border-green-100 rounded-2xl p-5 shadow-sm
+                                   hover:shadow-md hover:border-green-300 transition-all group"
+                      >
+                        {/* Card header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-600 to-emerald-500
+                                          flex items-center justify-center text-white shadow-sm shrink-0">
+                            <Building2 className="w-5 h-5" />
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full
+                                           bg-amber-100 text-amber-700">
+                            📍 {buyer.distanceKm} km away
+                          </span>
+                        </div>
+
+                        <h4 className="font-display font-bold text-gray-900 text-sm leading-tight mb-0.5">
+                          {buyer.companyName || buyer.name}
+                        </h4>
+                        <p className="text-gray-500 text-xs mb-3">{buyer.name}</p>
+
+                        <div className="space-y-2 mb-3">
+                          {/* Crops */}
+                          <div className="flex items-start gap-1.5">
+                            <Wheat className="w-3.5 h-3.5 text-green-600 mt-0.5 shrink-0" />
+                            <div>
+                              <span className="text-[10px] text-gray-400 uppercase font-bold block">Crops Needed</span>
+                              <span className="text-gray-700 text-xs font-semibold">
+                                {buyer.cropsRequired?.join(', ') || '—'}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Quantity */}
+                          <div className="flex items-start gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                            <div>
+                              <span className="text-[10px] text-gray-400 uppercase font-bold block">Quantity</span>
+                              <span className="text-gray-700 text-xs font-semibold">
+                                {buyer.requiredQuantity} {buyer.unit}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Location */}
+                          <div className="flex items-start gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+                            <div>
+                              <span className="text-[10px] text-gray-400 uppercase font-bold block">Location</span>
+                              <span className="text-gray-700 text-xs font-semibold leading-tight">
+                                {buyer.location?.address}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Contact */}
+                        <div className="flex gap-2 pt-2 border-t border-gray-100">
+                          {buyer.phone && (
+                            <a
+                              href={`tel:${buyer.phone}`}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl
+                                         bg-green-50 hover:bg-green-100 text-green-700 text-xs font-semibold
+                                         transition-colors"
+                            >
+                              <Phone className="w-3 h-3" /> Call
+                            </a>
+                          )}
+                          {buyer.email && (
+                            <a
+                              href={`mailto:${buyer.email}`}
+                              className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl
+                                         bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-semibold
+                                         transition-colors"
+                            >
+                              <Mail className="w-3 h-3" /> Email
+                            </a>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {/* Google Map with buyer markers */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <MapPin className="w-5 h-5 text-green-600" />
+                      <h3 className="font-display font-bold text-gray-900 text-base">
+                        Buyer Locations on Map
+                      </h3>
+                      <span className="text-xs text-gray-400">
+                        — Click a marker to view buyer details
+                      </span>
+                    </div>
+                    <BuyerMatchMap
+                      buyers={results}
+                      center={mapCenter}
+                      radiusKm={radiusKm >= 5000 ? 500 : radiusKm}
+                    />
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Register CTA for buyers */}
+        {!searched && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="text-center mt-6"
+          >
+            <p className="text-gray-400 text-sm">
+              Are you a buyer?{' '}
+              <Link
+                to="/login/buyer"
+                className="text-green-700 font-semibold hover:underline"
+              >
+                Register your business location →
+              </Link>{' '}
+              to appear in farmer searches.
+            </p>
+          </motion.div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export default function Seller() {
+
   const [customSearch, setCustomSearch] = useState(null)
   const [isSearching, setIsSearching] = useState(false)
 
@@ -726,6 +1088,9 @@ export default function Seller() {
           <FarmerDashboard customSearch={customSearch} onResetCustomSearch={handleResetSearch} />
         </div>
       </section>
+
+      {/* ── BUYER LOCATION MATCHING ── */}
+      <BuyerLocationMatchSection />
 
       {/* ── LIVE MARKET PRICES ── */}
       <section id="markets" className="py-24 bg-green-50 relative overflow-hidden">

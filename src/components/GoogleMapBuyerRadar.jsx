@@ -128,12 +128,16 @@ export default function GoogleMapBuyerRadar({
   // ── 1. Initialize Map ──
   useEffect(() => {
     if (!isLoaded || !mapContainerRef.current || !window.google?.maps) return
+    // Guard: MapTypeId must be available before creating map
+    if (!window.google.maps.MapTypeId) return
 
     if (!mapRef.current) {
       const mapOptions = {
         center: liveFarmerCoords,
         zoom: currentRadius <= 25 ? 11 : currentRadius <= 50 ? 10 : 9,
-        mapTypeId: mapTheme === 'HYBRID' ? window.google.maps.MapTypeId.HYBRID : window.google.maps.MapTypeId.ROADMAP,
+        mapTypeId: mapTheme === 'HYBRID'
+          ? window.google.maps.MapTypeId.HYBRID
+          : window.google.maps.MapTypeId.ROADMAP,
         styles: mapTheme === 'EMERALD' ? EMERALD_DARK_STYLES : null,
         disableDefaultUI: false,
         zoomControl: true,
@@ -146,6 +150,7 @@ export default function GoogleMapBuyerRadar({
       infoWindowRef.current = new window.google.maps.InfoWindow()
     }
   }, [isLoaded, liveFarmerCoords, currentRadius, mapTheme])
+
 
   // ── 2. Update Map Style when theme changes ──
   useEffect(() => {
