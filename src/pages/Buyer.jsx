@@ -15,6 +15,21 @@ import PriceComparisonMatrix from '../components/PriceComparisonMatrix'
 function BuyerSearchPanel() {
   const [search, setSearch] = useState({ crop: '', qty: '', location: '', maxDist: '100' })
   const [searched, setSearched] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+
+  // 50+ crops — buyer can type any name; not limited to this list
+  const ALL_CROPS = [
+    'Wheat','Rice','Basmati Rice','Onion','Tomato','Potato','Maize','Soybean',
+    'Cotton','Mustard','Sugarcane','Gram','Chana','Groundnut','Grapes',
+    'Pomegranate','Green Chilli','Turmeric','Garlic','Ginger','Moong Dal',
+    'Tur Dal','Urad Dal','Jowar','Bajra','Sunflower','Sesame','Arhar',
+    'Chickpea','Lentil','Pea','Cabbage','Cauliflower','Brinjal','Okra',
+    'Spinach','Bitter Gourd','Bottle Gourd','Pumpkin','Watermelon',
+    'Mango','Banana','Papaya','Guava','Lemon','Orange','Apple','Coconut',
+  ]
+  const cropSuggestions = search.crop.trim()
+    ? ALL_CROPS.filter(c => c.toLowerCase().includes(search.crop.toLowerCase()))
+    : ALL_CROPS.slice(0, 8)
 
   const mockResults = [
     { name: 'Ramesh Patil',  crop: 'Onion', qty: '500–2000 qtl', price: '₹1,260/qtl', dist: '28 km', rating: 4.8, verified: true,  history: 42, badge: 'TOP SELLER' },
@@ -30,15 +45,47 @@ function BuyerSearchPanel() {
       </div>
 
       <div className="space-y-3 mb-4">
-        <div>
+        {/* ── Crop Search Bar — type any crop name ── */}
+        <div className="relative">
           <label className="text-gray-500 text-xs mb-1 block font-medium">Crop Required</label>
-          <select value={search.crop} onChange={e => setSearch(s => ({ ...s, crop: e.target.value }))}
-            className="w-full px-4 py-3 rounded-xl bg-green-50 border border-green-200
-                       text-gray-800 text-sm focus:outline-none focus:border-green-500">
-            <option value="">Select crop...</option>
-            {['Onion','Wheat','Rice','Tomato','Potato','Maize','Soybean'].map(c => <option key={c}>{c}</option>)}
-          </select>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Type any crop (e.g. Wheat, Rice, Onion, Cotton…)"
+              value={search.crop}
+              onChange={e => {
+                setSearch(s => ({ ...s, crop: e.target.value }))
+                setShowDropdown(true)
+              }}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-green-50 border border-green-200
+                         text-gray-900 text-sm focus:outline-none focus:border-green-500
+                         focus:ring-2 focus:ring-green-100 transition-all"
+            />
+          </div>
+          {showDropdown && cropSuggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-green-200
+                            rounded-2xl shadow-xl z-50 max-h-48 overflow-y-auto py-1">
+              {cropSuggestions.map(crop => (
+                <button
+                  key={crop}
+                  type="button"
+                  onMouseDown={() => {
+                    setSearch(s => ({ ...s, crop }))
+                    setShowDropdown(false)
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-800 hover:bg-green-50
+                             font-medium transition-colors flex items-center gap-2"
+                >
+                  🌾 {crop}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-gray-500 text-xs mb-1 block font-medium">Min Quantity (qtl)</label>
