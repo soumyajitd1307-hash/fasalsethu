@@ -200,7 +200,7 @@ const steps = [
 ]
 
 const testimonials = [
-  { name: 'Ramesh Patil', role: 'Onion Farmer, Nashik', rating: 5, delay: 0,    text: 'AgriBridge showed me a buyer 40 km away paying ₹200 more per quintal. My profit doubled this season without any middleman!' },
+  { name: 'Ramesh Patil', role: 'Onion Farmer, Nashik', rating: 5, delay: 0,    text: 'Fasal Sethu showed me a buyer 40 km away paying ₹200 more per quintal. My profit doubled this season without any middleman!' },
   { name: 'Sunita Devi',  role: 'Wheat Farmer, Punjab', rating: 5, delay: 0.1,  text: 'The market comparison feature is incredible. I could see the net return after transport from 5 mandis — all in one screen.' },
   { name: 'Anjali Traders', role: 'Buyer, Pune',        rating: 5, delay: 0.2,  text: 'As a buyer, I can now post my requirements and instantly get matched with farmers. Procurement is 3× faster than before.' },
 ]
@@ -326,7 +326,7 @@ export default function Home() {
               </p>
               <h2 className="section-title text-white drop-shadow-2xl">Everything a Farmer Needs</h2>
               <p className="section-subtitle text-white/80 drop-shadow">
-                From seed to sale — AgriBridge provides end-to-end tools to help every Indian
+                From seed to sale — Fasal Sethu provides end-to-end tools to help every Indian
                 farmer maximise profit and eliminate the middleman.
               </p>
             </motion.div>
@@ -448,7 +448,7 @@ export default function Home() {
             <p className="text-green-300 text-center text-xs font-semibold uppercase tracking-widest mb-3 drop-shadow">Real Stories</p>
             <h2 className="section-title text-white drop-shadow-2xl">Farmers Are Winning</h2>
             <p className="section-subtitle text-white/80 drop-shadow">
-              Thousands of farmers and buyers across India are transforming their livelihoods with AgriBridge.
+              Thousands of farmers and buyers across India are transforming their livelihoods with Fasal Sethu.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {testimonials.map(t => <TestimonialCard key={t.name} {...t} />)}
@@ -478,7 +478,7 @@ export default function Home() {
                 <span className="text-gradient">Today — It's Free</span>
               </h2>
               <p className="text-gray-500 mb-8 max-w-lg mx-auto text-sm leading-relaxed">
-                Join 142,000+ farmers and 8,500+ buyers already using AgriBridge to trade
+                Join 142,000+ farmers and 8,500+ buyers already using Fasal Sethu to trade
                 smarter, faster, and more profitably.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">

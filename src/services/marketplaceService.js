@@ -177,17 +177,49 @@ export const marketplaceService = {
 
     // Mock query processing
     await new Promise(r => setTimeout(r, 60))
-    let results = [...MOCK_VERIFIED_BUYERS]
+    let results = MOCK_VERIFIED_BUYERS.map((b, idx) => {
+      const buyerCopy = { ...b }
+      // If custom farmer coordinates provided, calculate or simulate realistic local distances
+      if (typeof query.latitude === 'number' && typeof query.longitude === 'number') {
+        // Deterministic angle & distance for buyers relative to farmer's custom coordinates
+        const relativeDistances = [8, 14, 22, 38, 55, 74]
+        const d = relativeDistances[idx % relativeDistances.length]
+        const angle = (idx * 60 + 25) * (Math.PI / 180)
+        const latOffset = (d / 111) * Math.sin(angle)
+        const lngOffset = (d / (111 * Math.cos(query.latitude * (Math.PI / 180)))) * Math.cos(angle)
+        
+        buyerCopy.distance = d
+        buyerCopy.distanceKm = d
+        buyerCopy.latitude = +(query.latitude + latOffset).toFixed(4)
+        buyerCopy.longitude = +(query.longitude + lngOffset).toFixed(4)
+      }
+      return buyerCopy
+    })
 
     if (query.crop) {
-      results = results.filter(b =>
-        b.crops.some(c => c.toLowerCase().includes(query.crop.toLowerCase()))
+      const searchCrop = query.crop.trim().toLowerCase()
+      // First try to find buyers who already buy this crop
+      const matched = results.filter(b =>
+        b.crops.some(c => c.toLowerCase().includes(searchCrop) || searchCrop.includes(c.toLowerCase()))
       )
+      if (matched.length > 0) {
+        results = matched
+      } else {
+        // Dynamically assign this crop to nearby buyers with an estimated market price
+        results = results.slice(0, 5).map(b => ({
+          ...b,
+          crops: [query.crop, ...b.crops],
+          offeredPrices: {
+            ...b.offeredPrices,
+            [query.crop]: Math.round(2100 + (b.trustScore * 5))
+          }
+        }))
+      }
     }
 
     if (query.radius) {
       const maxKm = Number(query.radius)
-      results = results.filter(b => b.distance <= maxKm)
+      results = results.filter(b => (b.distance || b.distanceKm || 0) <= maxKm)
     }
 
     if (query.kycVerified) {

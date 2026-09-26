@@ -30,7 +30,7 @@ function PageLoader() {
           <div className="absolute inset-0 rounded-full border-4 border-green-100 border-t-green-500 animate-spin" />
           <div className="absolute inset-3 rounded-full border-2 border-green-100 border-b-lime-400 animate-spin" style={{ animationDirection: 'reverse' }} />
         </div>
-        <p className="text-green-600 text-sm font-medium">Loading AgriBridge...</p>
+        <p className="text-green-600 text-sm font-medium">Loading Fasal Sethu...</p>
       </div>
     </div>
   )
