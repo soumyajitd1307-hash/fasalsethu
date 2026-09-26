@@ -31,7 +31,7 @@ async function createHarness({ audience = 'test-audience' } = {}) {
   // JWKS document lives at <issuer>/.well-known/jwks.json).
   const issuer = `${jwksUrl}/`;
 
-  async function mint({ sub, role = 'user', iss = issuer, aud = audience, key = privateKey, kid = KID, alg = 'RS256', expiresIn = '1h', extra = {} }) {
+  async function mint({ sub, role = 'user', iss = issuer, aud = audience, key = privateKey, kid = KID, alg = 'RS256', expiresIn = '1h', extra = {}, header = {} }) {
     if (alg === 'HS256') {
       const secret = typeof key === 'string' ? new TextEncoder().encode(key) : key;
       return new jose.SignJWT({ sub, role, ...extra })
@@ -41,8 +41,10 @@ async function createHarness({ audience = 'test-audience' } = {}) {
         .setExpirationTime(expiresIn)
         .sign(secret);
     }
+    // `header` lets a test add protected-header claims (e.g. `jku`) to prove
+    // the verifier ignores anything but the configured JWKS URL.
     return new jose.SignJWT({ sub, role, ...extra })
-      .setProtectedHeader({ alg, kid, typ: 'JWT' })
+      .setProtectedHeader({ alg, kid, typ: 'JWT', ...header })
       .setIssuer(iss)
       .setAudience(aud)
       .setExpirationTime(expiresIn)

@@ -11,7 +11,9 @@ export default function ConnectionRequestModal({
   isOpen,
   onClose,
   buyer,
-  farmerId = 'frm-01',
+  // Supplied by FarmerDashboard from the authenticated session. No placeholder
+  // default: an absent id must stay absent rather than become a fake identity.
+  farmerId = null,
   batchId = null,
   defaultCrop = 'Onion (Nashik Red)',
   onSuccess,

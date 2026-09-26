@@ -101,6 +101,20 @@ const emailField = z
   .or(z.literal(''))
   .transform((v) => (v === '' ? undefined : v));
 
+// GSTIN is the buyer's login-capable identifier, so it is validated to its
+// canonical 15-character shape and uppercased (identifier.js normalizes it the
+// same way). Optional: a buyer may register with an email or phone instead.
+const gstinField = z
+  .string()
+  .trim()
+  .regex(
+    /^[0-9]{2}[A-Za-z]{5}[0-9]{4}[A-Za-z][0-9A-Za-z]Z[0-9A-Za-z]$/,
+    'invalid GSTIN format'
+  )
+  .optional()
+  .or(z.literal(''))
+  .transform((v) => (v === '' ? undefined : v.toUpperCase()));
+
 const farmerCreateSchema = z
   .object({
     name: z.string().trim().min(2, 'name is required (min 2 chars)'),
@@ -309,6 +323,92 @@ const notificationCreateSchema = z
   })
   .strict();
 
+// --- Auth schemas (first-party credentials) ---
+// The role is restricted to the two account types that exist, and the
+// identifier stays an opaque trimmed string: its type (Kisan ID, phone, GSTIN,
+// email) is derived by the auth layer, not guessed by the request. `strict()`
+// matters here so a caller cannot smuggle iss/aud/role-override style fields
+// into the body.
+const authLoginSchema = z
+  .object({
+    role: z.enum(['farmer', 'buyer'], { message: 'role must be farmer or buyer' }),
+    identifier: z.string().trim().min(1, 'identifier is required').max(320, 'identifier is too long'),
+    password: z.string().min(1, 'password is required').max(1024, 'password is too long'),
+  })
+  .strict();
+
+// --- Auth registration schemas ---
+// The credential fields sit beside a role-specific `profile` object. Nesting
+// keeps the two concerns apart, so the profile schema can be strict per role
+// and a caller cannot smuggle `id`, `kycStatus`, `trustScore` or a verification
+// timestamp into a profile it should not control.
+const authRegisterCredentialFields = {
+  // Login accepts the same identifier shapes, so registration must too; the
+  // identifier is additionally required to match a field of the profile.
+  identifier: z.string().trim().min(1, 'identifier is required').max(320, 'identifier is too long'),
+  // Policy is enforced on creation only: login deliberately does not re-check
+  // it, so an existing credential is never locked out by a policy change.
+  password: z.string().min(8, 'password must be at least 8 characters').max(1024, 'password is too long'),
+};
+
+const farmerRegisterProfileSchema = z
+  .object({
+    name: z.string().trim().min(2, 'name is required (min 2 chars)'),
+    phone: z.string().trim().regex(phoneRegex, 'invalid phone format'),
+    email: emailField,
+    kisanId: z.string().trim().min(3, 'kisanId must be at least 3 characters').max(64).optional(),
+    village: z.string().trim().optional(),
+    district: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    latitude: latSchema.optional(),
+    longitude: lngSchema.optional(),
+  })
+  .strict();
+
+const buyerRegisterProfileSchema = z
+  .object({
+    name: z.string().trim().min(2, 'name is required (min 2 chars)'),
+    companyName: z.string().trim().optional(),
+    phone: z.string().trim().regex(phoneRegex, 'invalid phone format'),
+    email: emailField,
+    gstin: gstinField,
+    buyerType: z.string().trim().optional(),
+    village: z.string().trim().optional(),
+    district: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    latitude: latSchema.optional(),
+    longitude: lngSchema.optional(),
+  })
+  .strict();
+
+// A discriminated union gives exactly one role-specific schema per request and
+// rejects any other role outright.
+const authRegisterSchema = z.discriminatedUnion('role', [
+  z
+    .object({
+      role: z.literal('farmer'),
+      ...authRegisterCredentialFields,
+      profile: farmerRegisterProfileSchema,
+    })
+    .strict(),
+  z
+    .object({
+      role: z.literal('buyer'),
+      ...authRegisterCredentialFields,
+      profile: buyerRegisterProfileSchema,
+    })
+    .strict(),
+]);
+
+// A refresh token is an opaque base64url secret, so the only validation is that
+// one was supplied and that it is not absurdly long. Its authenticity is
+// decided by the SHA-256 lookup, never by parsing.
+const authRefreshSchema = z
+  .object({
+    refresh_token: z.string().trim().min(1, 'refresh_token is required').max(512, 'refresh_token is too long'),
+  })
+  .strict();
+
 module.exports = {
   farmerSchema,
   buyerSchema,
@@ -331,6 +431,9 @@ module.exports = {
   dealQuerySchema,
   notificationQuerySchema,
   notificationCreateSchema,
+  authLoginSchema,
+  authRegisterSchema,
+  authRefreshSchema,
   paginationQuerySchema,
   validateBody,
   validateQuery,
