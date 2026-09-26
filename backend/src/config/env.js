@@ -124,11 +124,28 @@ function optional(value) {
   return String(value);
 }
 
+// Browser origins that are always permitted to call this API.
+//
+// CORS_ORIGIN *adds* to this list rather than replacing it, so a deployment
+// cannot lock out the published frontend by setting only a local origin.
+//
+// The GitHub Pages entry is deliberately the bare scheme+host. The site is
+// served from https://<owner>.github.io/<repo>/, but a browser sends only
+// scheme+host+port in the Origin header — the /<repo> path is not part of the
+// origin, so one entry covers the whole site.
+const DEFAULT_CORS_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://soumyajitd1307-hash.github.io',
+];
+
 module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT || 8000),
   databaseUrl: process.env.DATABASE_URL || null,
-  corsOrigins: parseOrigins(process.env.CORS_ORIGIN, 'http://localhost:5173'),
+  corsOrigins: [
+    ...new Set([...DEFAULT_CORS_ORIGINS, ...parseOrigins(process.env.CORS_ORIGIN, '')]),
+  ],
   // Auth0 JWT issuer base URL (e.g. https://TENANT.us.auth0.com/). Null when
   // unset — protected routes then fail closed with 503. Never hardcode tenants.
   auth0Issuer: process.env.AUTH0_ISSUER_BASE_URL
