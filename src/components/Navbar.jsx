@@ -1,15 +1,31 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, ArrowRight } from 'lucide-react'
+import { Menu, X, LogOut, User } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const { status, role, user, logout } = useAuth()
 
   useEffect(() => {
     setMobileOpen(false)
   }, [location])
+
+  const isAuthenticated = status === 'authenticated'
+  const displayName = (user && (user.name || user.companyName)) || (role === 'buyer' ? 'Buyer' : 'Farmer')
+
+  /**
+   * Signs out. The local session is cleared by authService.logout() even when
+   * the backend call fails, so the UI can never be left showing a signed-in
+   * shell with no valid credential.
+   */
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <>
@@ -36,14 +52,36 @@ export default function Navbar() {
             <Link to="/buyer" className="hover:text-black transition-colors">Buyer Portal</Link>
           </nav>
 
-          {/* Right Action: Login Button */}
+          {/* Right Action: session-aware */}
           <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="px-5 py-1.5 rounded-full bg-[#131722] hover:bg-black text-white text-xs sm:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow"
-            >
-              Login
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <span
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 border border-green-200 text-green-800 text-xs font-semibold max-w-[160px]"
+                  title={displayName}
+                >
+                  <User className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{displayName}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-green-600/80">
+                    {role === 'buyer' ? 'Buyer' : 'Farmer'}
+                  </span>
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-gray-200 hover:bg-gray-50 text-gray-700 hover:text-black text-xs sm:text-sm font-semibold transition-all duration-200"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                className="px-5 py-1.5 rounded-full bg-[#131722] hover:bg-black text-white text-xs sm:text-sm font-semibold transition-all duration-200 shadow-sm hover:shadow"
+              >
+                Login
+              </Link>
+            )}
 
             {/* Mobile Menu Toggle */}
             <button
@@ -72,9 +110,24 @@ export default function Navbar() {
             <Link to="/seller" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Farmer Portal</Link>
             <Link to="/buyer" className="text-gray-800 font-semibold text-base py-2 border-b border-gray-100">Buyer Portal</Link>
             <div className="pt-2 flex flex-col gap-2">
-              <Link to="/login" className="w-full text-center py-3 rounded-full bg-[#131722] text-white font-semibold text-sm">
-                Login
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <div className="px-3 py-2 rounded-2xl bg-green-50 border border-green-200 text-green-800 text-sm font-semibold truncate">
+                    {displayName} · {role === 'buyer' ? 'Buyer' : 'Farmer'}
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-center py-3 rounded-full border border-gray-200 text-gray-700 font-semibold text-sm flex items-center justify-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <Link to="/login" className="w-full text-center py-3 rounded-full bg-[#131722] text-white font-semibold text-sm">
+                  Login
+                </Link>
+              )}
             </div>
           </motion.div>
         )}

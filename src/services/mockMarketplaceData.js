@@ -10,7 +10,7 @@ export const STORAGE_KEY_LISTINGS = 'agribridge_farmer_listings_v2'
 export const STORAGE_KEY_REQUESTS = 'agribridge_connection_requests_v2'
 
 export const MOCK_FARMER_PROFILE = {
-  id: 'frm-01',
+  id: 'mock-farmer-01',
   name: 'Ramesh Patil',
   phone: '+91 98231 09842',
   location: {
@@ -30,7 +30,7 @@ export const MOCK_FARMER_PROFILE = {
 export const MOCK_INVENTORY_BATCHES = [
   {
     id: 'lst-101',
-    farmerId: 'frm-01',
+    farmerid: 'mock-farmer-01',
     farmerName: 'Ramesh Patil',
     crop: 'Onion (Nashik Red)',
     variety: 'Garwa / Late Kharif',
@@ -49,7 +49,7 @@ export const MOCK_INVENTORY_BATCHES = [
   },
   {
     id: 'lst-102',
-    farmerId: 'frm-01',
+    farmerid: 'mock-farmer-01',
     farmerName: 'Ramesh Patil',
     crop: 'Wheat (Sharbati)',
     variety: 'Sharbati Gold',
@@ -68,7 +68,7 @@ export const MOCK_INVENTORY_BATCHES = [
   },
   {
     id: 'lst-103',
-    farmerId: 'frm-01',
+    farmerid: 'mock-farmer-01',
     farmerName: 'Ramesh Patil',
     crop: 'Tomato (Hybrid)',
     variety: 'Abhinav 1057',
@@ -277,7 +277,7 @@ export const MOCK_REGIONAL_MANDIS = [
 export const MOCK_INITIAL_CONNECTIONS = [
   {
     id: 'req-301',
-    farmerId: 'frm-01',
+    farmerid: 'mock-farmer-01',
     buyerId: 'byr-201',
     buyerName: 'Kisan Agro Processing Ltd.',
     crop: 'Onion (Nashik Red)',
@@ -305,7 +305,7 @@ export const MOCK_INITIAL_CONNECTIONS = [
   },
   {
     id: 'req-302',
-    farmerId: 'frm-01',
+    farmerid: 'mock-farmer-01',
     buyerId: 'byr-202',
     buyerName: 'Sahyadri Farmers Producer Co.',
     crop: 'Tomato (Hybrid)',
@@ -343,7 +343,7 @@ export const MOCK_INITIAL_CONNECTIONS = [
   },
   {
     id: 'req-303',
-    farmerId: 'frm-01',
+    farmerid: 'mock-farmer-01',
     buyerId: 'byr-203',
     buyerName: 'Metro Wholesale Cash & Carry',
     crop: 'Wheat (Sharbati)',

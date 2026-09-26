@@ -6,12 +6,18 @@ import {
   Filter, CheckCircle2, AlertCircle, Sparkles, ChevronRight,
 } from 'lucide-react'
 import { marketplaceService } from '../services/marketplaceService'
+import { useAuth } from '../context/AuthContext'
 import NearbyMapInterface from './NearbyMapInterface'
 import PriceComparisonMatrix from './PriceComparisonMatrix'
 import ConnectionRequestModal from './ConnectionRequestModal'
 import ConnectionStatusTracker from './ConnectionStatusTracker'
 
 export default function FarmerDashboard() {
+  // The farmer identity comes from the verified session, never from a hardcoded
+  // placeholder and never from a URL or query value.
+  const { user } = useAuth()
+  const farmerId = user && user.id
+
   const [data, setData] = useState(null)
   const [buyers, setBuyers] = useState([])
   const [activeTab, setActiveTab] = useState('INVENTORY') // 'INVENTORY', 'DISCOVERY', 'COMPARISON', 'DEALS'
@@ -57,7 +63,7 @@ export default function FarmerDashboard() {
     }
 
     Promise.all([
-      marketplaceService.getFarmerDashboard(),
+      marketplaceService.getFarmerDashboard(farmerId),
       marketplaceService.getNearbyBuyers(buyerQuery),
     ])
       .then(([dashRes, buyersRes]) => {
@@ -84,7 +90,7 @@ export default function FarmerDashboard() {
 
   useEffect(() => {
     loadDashboard()
-  }, [cropFilter, maxDistFilter, verifiedOnly, sortBy])
+  }, [cropFilter, maxDistFilter, verifiedOnly, sortBy, farmerId])
 
   // Handle Add Crop Listing
   async function handleAddCrop(e) {
@@ -637,7 +643,7 @@ export default function FarmerDashboard() {
         isOpen={connectModalOpen}
         onClose={() => setConnectModalOpen(false)}
         buyer={selectedBuyerForConnect}
-        farmerId={farmer?.id || 'frm-01'}
+        farmerId={farmer?.id || farmerId}
         defaultCrop={selectedBuyerForConnect?.interestedCrops?.[0] || 'Onion (Nashik Red)'}
         onSuccess={() => {
           loadDashboard()

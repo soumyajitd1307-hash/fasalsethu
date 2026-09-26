@@ -1,12 +1,16 @@
 /**
  * Authentication & Authorization Middleware.
  *
- * Single authentication model: Auth0-style RS256 JWTs verified against a
- * JWKS endpoint. There is deliberately NO fallback to client-controlled
- * identity headers — a request carrying only `x-user-id` is unauthenticated.
+ * Single authentication model: RS256 JWTs verified against a JWKS endpoint.
+ * There is deliberately NO fallback to client-controlled identity headers — a
+ * request carrying only `x-user-id` is unauthenticated.
  *
+ * - Issuers are matched EXACTLY against a configured trusted set: every
+ *   entry of AUTH_TRUSTED_ISSUERS when present, otherwise the single
+ *   AUTH0_ISSUER_BASE_URL. There is no wildcard and no prefix matching, and a
+ *   JWKS URL is never taken from the request or from a token header.
  * - `requireAuth`: rejects missing/malformed/invalid tokens with 401.
- *   When Auth0 is not configured (no issuer), it fails closed with 503.
+ *   When no trusted issuer is configured, it fails closed with 503.
  *   Verified claims are exposed as `req.user = { id, role, email, name }`.
  * - `authorizeDealAccess` / `authorizeDealParticipant`: ownership checks
  *   (authorization, applied after authentication).
@@ -24,23 +28,58 @@ class AuthError extends Error {
 }
 
 function authNotConfigured() {
-  return new AuthError('Authentication is not configured (AUTH0_ISSUER_BASE_URL is not set)', 503);
+  return new AuthError('Authentication is not configured (no trusted issuer is set)', 503);
 }
 
 function withTrailingSlash(url) {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
-// JWKS client cache, keyed by issuer so tests can point at a local JWKS
-// server via environment without a process restart.
-let cachedIssuer = null;
-let cachedJwks = null;
+// Remote JWKS clients, keyed by RESOLVED JWKS URL. Keying by URL rather than
+// by a single slot keeps verification correct when several trusted issuers are
+// configured at once, and still lets tests point at a local JWKS server via
+// environment without a process restart.
+const jwksClients = new Map();
+
+/**
+ * The exact set of issuers this deployment accepts.
+ *
+ * AUTH_TRUSTED_ISSUERS wins when it holds at least one entry; otherwise the
+ * single AUTH0_ISSUER_BASE_URL is used, which preserves the original
+ * single-issuer behaviour exactly. An empty result means "not configured" and
+ * every caller must then fail closed with 503.
+ */
+function trustedIssuers() {
+  const configured = Array.isArray(env.authTrustedIssuers) ? env.authTrustedIssuers : [];
+  if (configured.length > 0) {
+    return configured.map((issuer) => withTrailingSlash(issuer));
+  }
+  return env.auth0Issuer ? [withTrailingSlash(env.auth0Issuer)] : [];
+}
+
+/**
+ * Resolves the JWKS document URL for a trusted issuer: an explicitly
+ * configured AUTH0_JWKS_URI wins for the primary issuer, and every other
+ * trusted issuer uses the standard <issuer>/.well-known/jwks.json derivation.
+ * The value is read from configuration only — never from a request header, a
+ * query parameter, or a token claim such as `jku`.
+ */
+function jwksUrlForIssuer(issuer) {
+  const normalized = withTrailingSlash(issuer);
+  if (env.auth0JwksUri && env.auth0Issuer && normalized === withTrailingSlash(env.auth0Issuer)) {
+    return env.auth0JwksUri;
+  }
+  return new URL('.well-known/jwks.json', normalized).toString();
+}
 
 function jwksForIssuer(issuer) {
-  if (cachedJwks && cachedIssuer === issuer) return cachedJwks;
-  cachedIssuer = issuer;
-  cachedJwks = jose.createRemoteJWKSet(new URL('.well-known/jwks.json', withTrailingSlash(issuer)));
-  return cachedJwks;
+  const url = jwksUrlForIssuer(issuer);
+  let client = jwksClients.get(url);
+  if (!client) {
+    client = jose.createRemoteJWKSet(new URL(url));
+    jwksClients.set(url, client);
+  }
+  return client;
 }
 
 /**
@@ -58,16 +97,30 @@ function extractToken(authHeader) {
 
 /**
  * Cryptographically verifies an RS256 JWT (signature, issuer, audience,
- * expiry/nbf) and returns its claims. Never decodes-without-verifying.
+ * expiry/nbf) against every configured trusted issuer and returns its claims.
+ * Each candidate issuer is checked exactly, against the same configured
+ * audience, with RS256 as the only permitted algorithm. Never decodes without
+ * verifying, and never falls back to a symmetric algorithm.
  */
 async function verifyToken(token) {
-  if (!env.auth0Issuer) throw authNotConfigured();
-  const options = { issuer: withTrailingSlash(env.auth0Issuer), algorithms: ['RS256'] };
-  if (env.auth0Audience) {
-    options.audience = env.auth0Audience;
+  const issuers = trustedIssuers();
+  if (issuers.length === 0) throw authNotConfigured();
+  let lastError = null;
+  for (const issuer of issuers) {
+    const options = { issuer, algorithms: ['RS256'] };
+    if (env.auth0Audience) {
+      options.audience = env.auth0Audience;
+    }
+    try {
+      const { payload } = await jose.jwtVerify(token, jwksForIssuer(issuer), options);
+      return payload;
+    } catch (err) {
+      // Try the next trusted issuer; a token that matches none is rejected
+      // below with a single generic error.
+      lastError = err;
+    }
   }
-  const { payload } = await jose.jwtVerify(token, jwksForIssuer(env.auth0Issuer), options);
-  return payload;
+  throw lastError;
 }
 
 function unauthorized(message) {
@@ -92,7 +145,7 @@ function isPrivileged(user) {
  */
 async function requireAuth(req, res, next) {
   try {
-    if (!env.auth0Issuer) throw authNotConfigured();
+    if (trustedIssuers().length === 0) throw authNotConfigured();
     const token = extractToken(req.headers && req.headers.authorization);
     if (!token) throw unauthorized('Unauthorized: missing or malformed Authorization Bearer token');
     let payload;
@@ -198,4 +251,7 @@ module.exports = {
   isPrivileged,
   extractToken,
   verifyToken,
+  trustedIssuers,
+  jwksUrlForIssuer,
+  jwksForIssuer,
 };

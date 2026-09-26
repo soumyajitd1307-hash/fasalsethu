@@ -2,57 +2,101 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Sprout, ShieldCheck, Phone, Lock, Eye, EyeOff,
+  Sprout, ShieldCheck, Lock, Eye, EyeOff,
   ArrowRight, ArrowLeft, CheckCircle2, Globe, HelpCircle,
-  Wheat, Sparkles, Building2
+  Wheat, Building2, AlertCircle
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
+/**
+ * Farmer sign-in against the real backend.
+ *
+ * The previous implementation faked authentication with setTimeout and an OTP
+ * flow that nothing verified. Both are gone: there is no OTP provider on the
+ * server, so the form no longer offers or simulates one, and the password is
+ * submitted to POST /api/auth/login for real.
+ *
+ * A farmer signs in with a Kisan ID, mobile number or email, all of which the
+ * backend accepts as the single `identifier` field.
+ */
 export default function FarmerLogin() {
   const navigate = useNavigate()
-  const [loginMethod, setLoginMethod] = useState('otp') // 'otp' | 'password'
-  const [phone, setPhone] = useState('')
-  const [kisanId, setKisanId] = useState('')
+  const { login } = useAuth()
+
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
-  const [otp, setOtp] = useState(['', '', '', '', '', ''])
-  const [otpSent, setOtpSent] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [selectedLang, setSelectedLang] = useState('English')
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   const languages = ['English', 'हिन्दी', 'मराठी', 'ਪੰਜਾਬੀ', 'తెలుగు']
 
-  const handleSendOtp = (e) => {
-    e?.preventDefault()
-    if (phone.length < 10) return
-    setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
-      setOtpSent(true)
-    }, 600)
-  }
+  /**
+   * Turns a backend error into something safe to show. Only the server's own
+   * message is surfaced; nothing about internals, tokens or account existence
+   * is added here. The backend deliberately answers every failed sign-in with
+   * the same generic message, so this cannot leak whether an account exists.
+   */
+  function describeError(err) {
+    const status = err && err.status
 
-  const handleOtpChange = (val, index) => {
-    if (!/^\d*$/.test(val)) return
-    const newOtp = [...otp]
-    newOtp[index] = val.slice(-1)
-    setOtp(newOtp)
-    if (val && index < 5) {
-      const nextInput = document.getElementById(`otp-${index + 1}`)
-      if (nextInput) nextInput.focus()
+    if (status === 400) {
+      return 'Please check your details and try again.'
     }
+    if (status === 401) {
+      return (err && err.message) || 'Invalid credentials.'
+    }
+    if (status === 429) {
+      const retryAfter = err.retryAfterSeconds
+      return retryAfter
+        ? `Too many attempts. Please try again in ${retryAfter} seconds.`
+        : 'Too many attempts. Please try again shortly.'
+    }
+    if (status === 503) {
+      return 'The service is temporarily unavailable. Please try again later.'
+    }
+    return 'Unable to sign in right now. Please try again.'
   }
 
-  const handleSubmit = (e) => {
+  function collectFieldErrors(err) {
+    const details = err && err.data && err.data.details
+    if (!details) return {}
+    // zod flatten(): { fieldName: [messages] }
+    const out = {}
+    for (const [field, messages] of Object.entries(details)) {
+      const key = field === 'identifier' ? 'identifier' : field
+      if (Array.isArray(messages) && messages.length > 0) out[key] = messages[0]
+    }
+    return out
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setError(null)
+    setFieldErrors({})
+
+    if (!identifier.trim() || !password) {
+      setFieldErrors({
+        ...(identifier.trim() ? {} : { identifier: 'Enter your Kisan ID or mobile number' }),
+        ...(password ? {} : { password: 'Enter your password' }),
+      })
+      return
+    }
+
     setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      await login('farmer', identifier.trim(), password)
       setSuccess(true)
-      setTimeout(() => {
-        navigate('/seller')
-      }, 900)
-    }, 700)
+      // Brief confirmation, then into the farmer portal.
+      setTimeout(() => navigate('/seller', { replace: true }), 900)
+    } catch (err) {
+      setFieldErrors(collectFieldErrors(err))
+      setError(describeError(err))
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -130,30 +174,14 @@ export default function FarmerLogin() {
             </div>
           </div>
 
-          {/* Login Method Toggle */}
-          <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-xl mb-6">
-            <button
-              type="button"
-              onClick={() => { setLoginMethod('otp'); setOtpSent(false); }}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                loginMethod === 'otp'
-                  ? 'bg-white text-green-800 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Mobile OTP (Fast)
-            </button>
-            <button
-              type="button"
-              onClick={() => setLoginMethod('password')}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                loginMethod === 'password'
-                  ? 'bg-white text-green-800 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Kisan ID / Password
-            </button>
+          {/* Sign-in notice: OTP is intentionally not offered.
+              The backend has no OTP provider, so presenting one here would be
+              a simulation. Password sign-in is the only real path today. */}
+          <div className="flex items-start gap-2 mb-5 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
+            <AlertCircle className="w-3.5 h-3.5 mt-px shrink-0 text-amber-600" />
+            <span>
+              Mobile OTP sign-in is not available yet. Use your Kisan ID or mobile number with your password.
+            </span>
           </div>
 
           {/* Success Screen */}
@@ -176,136 +204,71 @@ export default function FarmerLogin() {
               </motion.div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
-                {loginMethod === 'otp' ? (
-                  <>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                        Registered Mobile Number
-                      </label>
-                      <div className="relative flex items-center">
-                        <span className="absolute left-3.5 text-xs font-bold text-gray-500">
-                          +91
-                        </span>
-                        <input
-                          type="tel"
-                          maxLength={10}
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                          placeholder="98765 43210"
-                          disabled={otpSent}
-                          required
-                          className="w-full pl-12 pr-24 py-2.5 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none text-sm text-gray-900 transition-all disabled:bg-gray-50"
-                        />
-                        {!otpSent && (
-                          <button
-                            type="button"
-                            onClick={handleSendOtp}
-                            disabled={phone.length < 10 || isLoading}
-                            className="absolute right-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-40"
-                          >
-                            Send OTP
-                          </button>
-                        )}
-                        {otpSent && (
-                          <button
-                            type="button"
-                            onClick={() => setOtpSent(false)}
-                            className="absolute right-2 px-2 py-1 text-green-700 text-xs font-semibold hover:underline"
-                          >
-                            Change
-                          </button>
-                        )}
-                      </div>
+                  {/* Identifier: the backend takes one `identifier` field and
+                      accepts a Kisan ID, a mobile number or an email. */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                      Kisan ID or Mobile Number
+                    </label>
+                    <div className="relative flex items-center">
+                      <Sprout className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                      <input
+                        type="text"
+                        value={identifier}
+                        onChange={(e) => setIdentifier(e.target.value)}
+                        placeholder="e.g. KISAN-9842 or 9876543210"
+                        autoComplete="username"
+                        required
+                        aria-invalid={Boolean(fieldErrors.identifier)}
+                        className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none text-sm text-gray-900 transition-all"
+                      />
                     </div>
-
-                    {otpSent && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        className="space-y-2 pt-1"
-                      >
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-gray-700">
-                            Enter 6-Digit OTP
-                          </label>
-                          <span className="text-[11px] text-green-700">
-                            OTP sent to +91 {phone}
-                          </span>
-                        </div>
-                        <div className="flex gap-2 justify-between">
-                          {otp.map((digit, idx) => (
-                            <input
-                              key={idx}
-                              id={`otp-${idx}`}
-                              type="text"
-                              maxLength={1}
-                              value={digit}
-                              onChange={(e) => handleOtpChange(e.target.value, idx)}
-                              className="w-11 h-12 text-center text-lg font-bold rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none transition-all"
-                            />
-                          ))}
-                        </div>
-                        <div className="flex justify-end pt-1">
-                          <button
-                            type="button"
-                            onClick={handleSendOtp}
-                            className="text-[11px] font-medium text-gray-500 hover:text-green-700"
-                          >
-                            Resend OTP in 30s
-                          </button>
-                        </div>
-                      </motion.div>
+                    {fieldErrors.identifier && (
+                      <p className="mt-1 text-[11px] text-red-600">{fieldErrors.identifier}</p>
                     )}
-                  </>
-                ) : (
-                  <>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                        Kisan ID or Phone
-                      </label>
-                      <div className="relative flex items-center">
-                        <Sprout className="w-4 h-4 text-gray-400 absolute left-3.5" />
-                        <input
-                          type="text"
-                          value={kisanId}
-                          onChange={(e) => setKisanId(e.target.value)}
-                          placeholder="e.g. KISAN-9842 or 9876543210"
-                          required
-                          className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none text-sm text-gray-900 transition-all"
-                        />
-                      </div>
-                    </div>
+                  </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-gray-700">
-                          Password / PIN
-                        </label>
-                        <a href="#forgot" className="text-[11px] font-medium text-green-700 hover:underline">
-                          Forgot PIN?
-                        </a>
-                      </div>
-                      <div className="relative flex items-center">
-                        <Lock className="w-4 h-4 text-gray-400 absolute left-3.5" />
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Enter your security PIN or password"
-                          required
-                          className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none text-sm text-gray-900 transition-all"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 text-gray-400 hover:text-gray-600"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1.5 block">
+                      Password
+                    </label>
+                    <div className="relative flex items-center">
+                      <Lock className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        required
+                        aria-invalid={Boolean(fieldErrors.password)}
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none text-sm text-gray-900 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 text-gray-400 hover:text-gray-600"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
-                  </>
-                )}
+                    {fieldErrors.password && (
+                      <p className="mt-1 text-[11px] text-red-600">{fieldErrors.password}</p>
+                    )}
+                  </div>
+
+                  {/* Server-side error: 401 invalid credentials, 429 rate limited,
+                      503 unavailable. Never renders internals. */}
+                  {error && (
+                    <div
+                      role="alert"
+                      className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-700"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 mt-px shrink-0 text-red-600" />
+                      <span>{error}</span>
+                    </div>
+                  )}
 
                 {/* Remember & Trust */}
                 <div className="flex items-center justify-between text-xs pt-1">
@@ -326,7 +289,7 @@ export default function FarmerLogin() {
                 {/* Submit CTA */}
                 <button
                   type="submit"
-                  disabled={isLoading || (loginMethod === 'otp' && !otpSent)}
+                  disabled={isLoading}
                   className="w-full py-3 rounded-full bg-gradient-to-r from-green-700 to-green-500 hover:from-green-600 hover:to-green-400 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isLoading ? (
@@ -346,7 +309,7 @@ export default function FarmerLogin() {
           <div className="mt-6 pt-5 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-500">
               New to Fasal sethu?{' '}
-              <Link to="/seller" className="font-semibold text-green-700 hover:underline">
+              <Link to="/farmer-register" className="font-semibold text-green-700 hover:underline">
                 Register as a New Farmer →
               </Link>
             </p>

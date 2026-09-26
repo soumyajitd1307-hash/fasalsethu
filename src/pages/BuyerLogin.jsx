@@ -4,29 +4,85 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Building2, ShieldCheck, Mail, Lock, Eye, EyeOff,
   ArrowRight, ArrowLeft, CheckCircle2, Briefcase, FileText,
-  Sprout, Award, ChevronRight
+  Sprout, Award, AlertCircle
 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
+/**
+ * Buyer sign-in against the real backend.
+ *
+ * Replaces the previous setTimeout simulation. A buyer signs in with a GSTIN,
+ * corporate email or phone number, all of which the backend accepts as the
+ * single `identifier` field. The email/GSTIN toggle is kept purely as an input
+ * affordance — it never changes what is sent.
+ */
 export default function BuyerLogin() {
   const navigate = useNavigate()
+  const { login } = useAuth()
+
   const [authType, setAuthType] = useState('email') // 'email' | 'gstin'
-  const [email, setEmail] = useState('')
-  const [gstin, setGstin] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
 
-  const handleSubmit = (e) => {
+  function describeError(err) {
+    const status = err && err.status
+    if (status === 400) return 'Please check your details and try again.'
+    if (status === 401) return (err && err.message) || 'Invalid credentials.'
+    if (status === 429) {
+      const retryAfter = err.retryAfterSeconds
+      return retryAfter
+        ? `Too many attempts. Please try again in ${retryAfter} seconds.`
+        : 'Too many attempts. Please try again shortly.'
+    }
+    if (status === 503) return 'The service is temporarily unavailable. Please try again later.'
+    return 'Unable to sign in right now. Please try again.'
+  }
+
+  function collectFieldErrors(err) {
+    const details = err && err.data && err.data.details
+    if (!details) return {}
+    const out = {}
+    for (const [field, messages] of Object.entries(details)) {
+      if (Array.isArray(messages) && messages.length > 0) out[field] = messages[0]
+    }
+    return out
+  }
+
+  function handleAuthTypeChange(next) {
+    setAuthType(next)
+    setIdentifier('')
+    setFieldErrors({})
+    setError(null)
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setError(null)
+    setFieldErrors({})
+
+    if (!identifier.trim() || !password) {
+      setFieldErrors({
+        ...(identifier.trim() ? {} : { identifier: authType === 'email' ? 'Enter your business email' : 'Enter your GSTIN' }),
+        ...(password ? {} : { password: 'Enter your password' }),
+      })
+      return
+    }
+
     setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      await login('buyer', identifier.trim(), password)
       setSuccess(true)
-      setTimeout(() => {
-        navigate('/buyer')
-      }, 900)
-    }, 700)
+      setTimeout(() => navigate('/buyer', { replace: true }), 900)
+    } catch (err) {
+      setFieldErrors(collectFieldErrors(err))
+      setError(describeError(err))
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -84,7 +140,7 @@ export default function BuyerLogin() {
           <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-xl mb-6">
             <button
               type="button"
-              onClick={() => setAuthType('email')}
+              onClick={() => handleAuthTypeChange('email')}
               className={`py-2 text-xs font-semibold rounded-lg transition-all ${
                 authType === 'email'
                   ? 'bg-white text-gray-900 shadow-sm'
@@ -95,7 +151,7 @@ export default function BuyerLogin() {
             </button>
             <button
               type="button"
-              onClick={() => setAuthType('gstin')}
+              onClick={() => handleAuthTypeChange('gstin')}
               className={`py-2 text-xs font-semibold rounded-lg transition-all ${
                 authType === 'gstin'
                   ? 'bg-white text-gray-900 shadow-sm'
@@ -126,73 +182,81 @@ export default function BuyerLogin() {
               </motion.div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
-                {authType === 'email' ? (
+                  {/* One identifier field. The email/GSTIN toggle above only
+                      changes the label, hint and input type; the backend always
+                      receives a single `identifier`. */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                      Business or Corporate Email
+                      {authType === 'email' ? 'Business or Corporate Email' : 'Company GSTIN'}
                     </label>
                     <div className="relative flex items-center">
-                      <Mail className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                      {authType === 'email' ? (
+                        <Mail className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                      )}
                       <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="procurement@company.com"
+                        type={authType === 'email' ? 'email' : 'text'}
+                        value={identifier}
+                        onChange={(e) =>
+                          setIdentifier(authType === 'gstin' ? e.target.value.toUpperCase() : e.target.value)
+                        }
+                        placeholder={authType === 'email' ? 'procurement@company.com' : '27AAAAA0000A1Z5'}
+                        maxLength={authType === 'gstin' ? 15 : undefined}
+                        autoComplete="username"
                         required
+                        aria-invalid={Boolean(fieldErrors.identifier)}
                         className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm text-gray-900 transition-all"
                       />
                     </div>
+                    {fieldErrors.identifier && (
+                      <p className="mt-1 text-[11px] text-red-600">{fieldErrors.identifier}</p>
+                    )}
                   </div>
-                ) : (
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                      Company GSTIN or Business Trade ID
-                    </label>
-                    <div className="relative flex items-center">
-                      <FileText className="w-4 h-4 text-gray-400 absolute left-3.5" />
-                      <input
-                        type="text"
-                        value={gstin}
-                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
-                        placeholder="27AAAAA0000A1Z5"
-                        maxLength={15}
-                        required
-                        className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm font-mono text-gray-900 transition-all"
-                      />
-                    </div>
-                  </div>
-                )}
 
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-gray-700">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1.5 block">
                       Password
                     </label>
-                    <a href="#forgot" className="text-[11px] font-medium text-emerald-700 hover:underline">
-                      Forgot Password?
-                    </a>
+                    <div className="relative flex items-center">
+                      <Lock className="w-4 h-4 text-gray-400 absolute left-3.5" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        required
+                        aria-invalid={Boolean(fieldErrors.password)}
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm text-gray-900 transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 text-gray-400 hover:text-gray-600"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {fieldErrors.password && (
+                      <p className="mt-1 text-[11px] text-red-600">{fieldErrors.password}</p>
+                    )}
                   </div>
-                  <div className="relative flex items-center">
-                    <Lock className="w-4 h-4 text-gray-400 absolute left-3.5" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      required
-                      className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none text-sm text-gray-900 transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
 
-                {/* Corporate Security Badges */}
+                  {/* Server-side error: 401 invalid credentials, 429 rate limited,
+                      503 unavailable. Never renders internals. */}
+                  {error && (
+                    <div
+                      role="alert"
+                      className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-700"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 mt-px shrink-0 text-red-600" />
+                      <span>{error}</span>
+                    </div>
+                  )}
+
+                  {/* Corporate Security Badges */}
                 <div className="flex items-center justify-between text-xs pt-1">
                   <label className="flex items-center gap-2 cursor-pointer text-gray-600">
                     <input
@@ -231,8 +295,8 @@ export default function BuyerLogin() {
           <div className="mt-6 pt-5 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-500">
               New bulk buyer, processor or exporter?{' '}
-              <Link to="/buyer" className="font-semibold text-emerald-700 hover:underline">
-                Explore Buyer Solutions →
+              <Link to="/buyer-register" className="font-semibold text-emerald-700 hover:underline">
+                Register as a New Buyer →
               </Link>
             </p>
             <div className="mt-3 inline-flex items-center gap-1 text-[11px] text-gray-400">

@@ -17,6 +17,7 @@ model Farmer {
   name       String
   phone      String
   email      String?  @unique
+  kisanId    String?  @unique
   village    String?
   district   String?
   state      String?
@@ -41,6 +42,7 @@ model Buyer {
   companyName String?
   phone       String
   email       String?  @unique
+  gstin       String?  @unique
   buyerType   String?
   village     String?
   district    String?
@@ -184,3 +186,54 @@ model Notification {
   @@map("notifications")
 }
 
+// First-party login credential. Backs POST /api/auth/login and
+// POST /api/auth/register: one row per account, written and read by
+// src/services/authService.js.
+// A single row represents EITHER a Farmer OR a Buyer, so `userId` holds an
+// existing Farmer.id / Buyer.id cuid with deliberately NO foreign key: the two
+// live in different tables and one of them must always exist.
+// `userId` is the value issued as the JWT `sub` claim, because that is what
+// dealScopeFor / authorizeDealParticipant and the notification lookups already
+// compare against. Never repoint it at an external identity-provider subject.
+// `passwordHash` holds a scrypt digest (see src/auth/password.js), never a
+// plaintext password. `identifierNormalized` is the unique lookup key, and
+// `failedAttempts`/`lockedUntil` back the bounded account lockout.
+model AuthAccount {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  role                 String
+  identifier           String
+  identifierNormalized String    @unique
+  passwordHash         String
+  status               String    @default("ACTIVE")
+  failedAttempts       Int       @default(0)
+  lockedUntil          DateTime?
+  lastLoginAt          DateTime?
+  emailVerifiedAt      DateTime?
+  phoneVerifiedAt      DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([role, identifierNormalized])
+  @@map("auth_accounts")
+}
+
+// Rotating refresh tokens (schema only — no auth behaviour yet).
+// Only the digest is stored, so a database leak cannot be replayed as a token.
+// `familyId` groups every token descended from one login, which is what makes
+// reuse of an already-rotated token detectable.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  role      String
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}

@@ -32,11 +32,13 @@ export const marketplaceService = {
   /**
    * Fetches farmer profile and KYC status
    * Backend Endpoint: GET /api/farmers/:farmerId
-   * @param {string} [farmerId='frm-01']
+   * @param {string} [farmerId] the AUTHENTICATED farmer id. Never defaulted to a
+   *   fake identity: without one there is nothing real to fetch, so the mock is
+   *   used directly rather than requesting a placeholder id.
    */
-  async getFarmerProfile(farmerId = 'frm-01') {
+  async getFarmerProfile(farmerId) {
     try {
-      if (apiClient.isConfigured()) {
+      if (farmerId && apiClient.isConfigured()) {
         return await apiClient.get(`farmers/${farmerId}`)
       }
     } catch (err) {
@@ -46,17 +48,17 @@ export const marketplaceService = {
 
     // Mock Fallback
     await new Promise(r => setTimeout(r, 40))
-    return { ...MOCK_FARMER_PROFILE, id: farmerId }
+    return { ...MOCK_FARMER_PROFILE, id: farmerId || MOCK_FARMER_PROFILE.id }
   },
 
   /**
    * Fetches all inventory batches for a farmer
    * Backend Endpoint: GET /api/farmers/:farmerId/inventory
-   * @param {string} [farmerId='frm-01']
+   * @param {string} [farmerId] the AUTHENTICATED farmer id
    */
-  async getFarmerInventory(farmerId = 'frm-01') {
+  async getFarmerInventory(farmerId) {
     try {
-      if (apiClient.isConfigured()) {
+      if (farmerId && apiClient.isConfigured()) {
         return await apiClient.get(`farmers/${farmerId}/inventory`)
       }
     } catch (err) {
@@ -71,12 +73,12 @@ export const marketplaceService = {
   /**
    * Creates a new crop inventory batch
    * Backend Endpoint: POST /api/farmers/:farmerId/inventory
-   * @param {Object} batchData
+   * @param {Object} batchData must carry the authenticated `farmerId`
    */
   async addCropListing(batchData) {
     try {
-      if (apiClient.isConfigured()) {
-        return await apiClient.post(`farmers/${batchData.farmerId || 'frm-01'}/inventory`, batchData)
+      if (batchData.farmerId && apiClient.isConfigured()) {
+        return await apiClient.post(`farmers/${batchData.farmerId}/inventory`, batchData)
       }
     } catch (err) {
       if (!apiClient.shouldFallback()) throw err
@@ -87,8 +89,8 @@ export const marketplaceService = {
     const listings = getStoredData(STORAGE_KEY_LISTINGS, MOCK_INVENTORY_BATCHES)
     const newListing = {
       id: `lst-${Date.now().toString().slice(-4)}`,
-      farmerId: 'frm-01',
-      farmerName: 'Ramesh Patil',
+      farmerId: batchData.farmerId || MOCK_FARMER_PROFILE.id,
+      farmerName: MOCK_FARMER_PROFILE.name,
       crop: batchData.crop || 'Wheat',
       variety: batchData.variety || 'Standard Grade',
       category: batchData.category || 'Grains',
@@ -113,7 +115,7 @@ export const marketplaceService = {
   /**
    * Unified farmer dashboard summary
    */
-  async getFarmerDashboard(farmerId = 'frm-01') {
+  async getFarmerDashboard(farmerId) {
     const [farmer, listings, requests] = await Promise.all([
       this.getFarmerProfile(farmerId),
       this.getFarmerInventory(farmerId),
@@ -293,9 +295,9 @@ export const marketplaceService = {
   /**
    * Fetches all connection requests for a farmer
    * Backend Endpoint: GET /api/connections
-   * @param {string} [farmerId='frm-01']
+   * @param {string} [farmerId] the AUTHENTICATED farmer id
    */
-  async getConnections(farmerId = 'frm-01') {
+  async getConnections(farmerId) {
     try {
       if (apiClient.isConfigured()) {
         return await apiClient.get('connections', { farmerId })
@@ -355,7 +357,7 @@ export const marketplaceService = {
     const requests = getStoredData(STORAGE_KEY_REQUESTS, MOCK_INITIAL_CONNECTIONS)
     const newReq = {
       id: `req-${Date.now().toString().slice(-5)}`,
-      farmerId: data.farmerId || 'frm-01',
+      farmerId: data.farmerId,
       buyerId: data.buyerId,
       buyerName: data.buyerName,
       crop: data.crop,
