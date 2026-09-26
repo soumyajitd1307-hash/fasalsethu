@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - frontend-saranjaya
   workflow_dispatch:
 
 permissions:
